@@ -1,0 +1,20 @@
+{
+  "algorithm": "HMAC-SM3",
+  "description": "HMAC-SM3 regression test vectors",
+  "testGroups": [
+    {
+      "tests": [
+        {
+          "tcId": 1,
+          "description": "HMAC-SM3 of abc",
+          "sourceType": "regression",
+          "source": "OpenSSL 1.1.1i; independent verification pending",
+          "key": "00112233445566778899aabbccddeeff",
+          "msg": "616263",
+          "msgLen": 24,
+          "tag": "0933617a88d312f6f9fb4b5f200e31a64d655e92f7fa2a43f55dfeeb8ab6788d"
+        }
+      ]
+    }
+  ]
+}

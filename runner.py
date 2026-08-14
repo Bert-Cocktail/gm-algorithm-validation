@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import sm4_runner
+import hmac_sm3_runner
 
 
 EXIT_SUCCESS = 0
@@ -30,10 +31,10 @@ class RunnerError(Exception):
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run SM3 or SM4 test vectors with OpenSSL."
+        description="Run SM3, HMAC-SM3, or SM4 test vectors with OpenSSL."
     )
     parser.add_argument(
-        "vector_file", type=Path, help="path to an SM3 or SM4 JSON file"
+        "vector_file", type=Path, help="path to a supported JSON vector file"
     )
     parser.add_argument(
         "--openssl",
@@ -207,9 +208,14 @@ def run_document(document: dict[str, Any], openssl: str) -> int:
             raise RunnerError("the 'testGroups' field must be an array")
         return sm4_runner.run_tests(sm4_runner.extract_tests(document), openssl)
 
+    if algorithm == "HMAC-SM3":
+        return hmac_sm3_runner.run_tests(
+            hmac_sm3_runner.extract_tests(document), openssl
+        )
+
     name = algorithm or "<missing>"
     raise RunnerError(
-        f"unsupported algorithm '{name}'; supported algorithms: SM3, SM4"
+        f"unsupported algorithm '{name}'; supported algorithms: SM3, HMAC-SM3, SM4"
     )
 
 
@@ -219,7 +225,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         document = load_document(args.vector_file)
         openssl = resolve_openssl(args.openssl)
         return run_document(document, openssl)
-    except (RunnerError, sm4_runner.RunnerError) as error:
+    except (RunnerError, hmac_sm3_runner.RunnerError, sm4_runner.RunnerError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return EXIT_INPUT_ERROR
 

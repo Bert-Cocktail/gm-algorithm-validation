@@ -190,7 +190,7 @@ SM4 共完成 14 项测试：
 | 错误预期密文 | 确认 FAIL 和退出码 | 通过 |
 | OpenSSL 缺失 | 确认环境错误提示 | 通过 |
 
-统一入口根据 JSON 的 `algorithm` 字段自动选择 SM3 或 SM4。运行 SM3 和 SM4 全部测试：
+统一入口根据 JSON 的 `algorithm` 字段自动选择 SM3、HMAC-SM3 或 SM4。运行全部单元测试：
 
 ```powershell
 python -m unittest discover -s tests -v
@@ -199,12 +199,12 @@ python -m unittest discover -s tests -v
 本次实测结果：
 
 ```text
-Ran 33 tests in ...
+Ran 50 tests in ...
 
 OK
 ```
 
-其中 SM4 测试仍为 14 项；新增的 7 项用于验证 `gmcrypto.py` 的 SM3 文本、十六进制和文件入口。
+其中 SM4 测试仍为 14 项；普通用户 CLI 包含 7 项 SM3 测试和 8 项 HMAC-SM3 测试。
 
 ## 11. 安全性分析
 

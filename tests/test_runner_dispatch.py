@@ -1,4 +1,4 @@
-"""Tests for the unified SM3/SM4 runner entry point."""
+"""Tests for the unified GM algorithm vector runner entry point."""
 
 from __future__ import annotations
 
@@ -25,6 +25,14 @@ class TestUnifiedRunner(unittest.TestCase):
     def test_dispatches_sm4_vector_file(self) -> None:
         with redirect_stdout(io.StringIO()):
             result = runner.main([str(PROJECT_ROOT / "vectors" / "sm4.json")])
+
+        self.assertEqual(result, runner.EXIT_SUCCESS)
+
+    def test_dispatches_hmac_sm3_vector_file(self) -> None:
+        with redirect_stdout(io.StringIO()):
+            result = runner.main(
+                [str(PROJECT_ROOT / "vectors" / "hmac-sm3.json")]
+            )
 
         self.assertEqual(result, runner.EXIT_SUCCESS)
 

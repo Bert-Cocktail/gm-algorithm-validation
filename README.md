@@ -1,6 +1,6 @@
 # GM Algorithm Validation Lab
 
-这是一个面向国密算法学习的实验仓库。项目调用 OpenSSL 完成密码运算，并按照“读取测试向量、校验输入、执行算法、比较预期结果、输出 PASS/FAIL”的流程验证 SM3 和 SM4。
+这是一个面向国密算法学习的实验仓库。项目调用 OpenSSL 完成密码运算，支持 SM3、HMAC-SM3 和 SM4 实验，并按照“读取测试向量、校验输入、执行算法、比较预期结果、输出 PASS/FAIL”的流程进行验证。
 
 项目不从零实现密码算法，也不以替代 GmSSL 为目标。当前重点是建立可复现、可测试、可继续扩展的国密算法实验框架。
 
@@ -22,6 +22,13 @@
 - 使用无 padding 模式验证整分组输入
 - 拒绝重复 `tcId`、不支持的模式和错误参数
 
+### HMAC-SM3
+
+- 使用十六进制密钥对文本、十六进制消息或文件生成认证 tag
+- 使用恒定时间比较验证已有 tag
+- 正确验证输出 `OK`，不匹配输出 `FAIL`
+- tag 固定为 32 byte，即 64 个十六进制字符
+
 两个执行器都会输出每个测试用例的 PASS/FAIL，并区分测试失败与输入、环境错误。
 
 当前尚未实现：GmSSL 后端、C API、padding、认证加密、SM2、性能测试和 ACVTS 接入。
@@ -33,17 +40,23 @@ gm-algorithm-validation/
 ├── README.md
 ├── gmcrypto.py
 ├── runner.py
+├── hmac_sm3_runner.py
 ├── sm4_runner.py
 ├── vectors/
 │   ├── sm3.json
+│   ├── hmac-sm3.json
 │   └── sm4.json
 ├── tests/
 │   ├── test_sm3.py
-│   └── test_sm4.py
+│   ├── test_hmac_sm3.py
+│   ├── test_sm4.py
+│   ├── test_gmcrypto.py
+│   └── test_runner_dispatch.py
 ├── examples/
 │   └── message.txt
 ├── docs/
 │   ├── sm3-experiment.md
+│   ├── hmac-sm3-experiment.md
 │   └── sm4-experiment.md
 └── results/
 ```
@@ -91,6 +104,26 @@ python gmcrypto.py sm3 --file examples\message.txt
 
 三种方式都输出 64 个十六进制字符的 SM3 摘要。`--text` 默认使用 UTF-8，可通过 `--encoding` 指定其他文本编码；`--file` 由 OpenSSL 直接读取，Python 不会把整个文件载入内存。
 
+生成 HMAC-SM3 tag：
+
+```powershell
+python gmcrypto.py hmac-sm3 --key-hex 00112233445566778899aabbccddeeff --text "abc"
+```
+
+验证 tag：
+
+```powershell
+python gmcrypto.py hmac-sm3 --key-hex 00112233445566778899aabbccddeeff --text "abc" --verify 0933617a88d312f6f9fb4b5f200e31a64d655e92f7fa2a43f55dfeeb8ab6788d
+```
+
+HMAC 验证成功返回 `OK` 和退出码 `0`，不匹配返回 `FAIL` 和退出码 `1`。
+
+运行 HMAC-SM3 JSON 回归向量：
+
+```powershell
+python runner.py vectors\hmac-sm3.json
+```
+
 运行 SM3 标准与边界回归向量：
 
 ```powershell
@@ -112,7 +145,7 @@ python runner.py vectors\sm3.json
 Total: 8, Passed: 8, Failed: 0
 ```
 
-统一入口会根据 JSON 中的 `algorithm` 字段自动选择 SM3 或 SM4。运行 SM4 向量：
+统一入口会根据 JSON 中的 `algorithm` 字段自动选择 SM3、HMAC-SM3 或 SM4。运行 SM4 向量：
 
 ```powershell
 python runner.py vectors\sm4.json
@@ -137,6 +170,7 @@ Total: 8, Passed: 8, Failed: 0
 
 ```powershell
 python runner.py vectors\sm3.json --openssl "C:\path\to\openssl.exe"
+python runner.py vectors\hmac-sm3.json --openssl "C:\path\to\openssl.exe"
 python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 ```
 
@@ -156,17 +190,19 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 33 项测试：
+当前共有 50 项测试：
 
 - 9 项 SM3 测试
 - 14 项 SM4 测试
-- 3 项统一入口分派测试
-- 7 项普通用户 CLI 测试
+- 7 项普通用户 SM3 CLI 测试
+- 8 项 HMAC-SM3 CLI 测试
+- 8 项 HMAC-SM3 向量执行器测试
+- 4 项统一入口分派测试
 
 本次实测结果：
 
 ```text
-Ran 33 tests in ...
+Ran 50 tests in ...
 
 OK
 ```
@@ -236,6 +272,7 @@ SM4 测试用例示例：
 - CBC 本身不提供完整性认证，实际系统需要采用经过审查的认证加密方案或加密加认证结构。
 - 测试向量通过只能说明所测输入输出一致，不能单独证明整个密码库不存在安全漏洞。
 - `gmcrypto.py` 当前只向普通用户开放 SM3；SM4 在补齐安全文件格式、padding 和完整性认证前仍只用于测试向量实验。
+- `--key-hex` 会出现在命令历史和进程参数中，只适合学习实验，不应直接传入真实生产密钥。
 
 ## 下一步计划
 

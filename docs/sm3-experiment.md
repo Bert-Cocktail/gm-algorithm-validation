@@ -190,4 +190,4 @@ SM3 experiment Message
 2. 使用 OpenSSL EVP API 编写 C 语言 SM3 命令行程序。
 3. 使用同一批 JSON 向量交叉验证 OpenSSL CLI 与 C 后端。
 4. 增加文件流式读取测试和更大的二进制输入。
-5. 加入 GmSSL 后端，并继续开展 HMAC-SM3、SM4 和 SM2 实验。
+5. HMAC-SM3 已实现，后续加入独立标准向量、安全密钥输入方式和 GmSSL 后端。

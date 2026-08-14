@@ -72,6 +72,7 @@ SM4 的基本参数为：
 
 ```text
 algorithm = SM3 -> 执行 SM3 逻辑
+algorithm = HMAC-SM3 -> 执行 HMAC-SM3 逻辑
 algorithm = SM4 -> 执行 SM4 逻辑
 其他值         -> 报告不支持并返回退出码 2
 ```
@@ -89,19 +90,24 @@ gm-algorithm-validation/
 ├── README.md
 ├── gmcrypto.py                # 普通用户命令行工具
 ├── runner.py                  # SM3 实现和统一入口
+├── hmac_sm3_runner.py         # HMAC-SM3 实现与向量校验
 ├── sm4_runner.py              # SM4 实现与兼容入口
 ├── vectors/
 │   ├── sm3.json               # SM3 测试向量
+│   ├── hmac-sm3.json          # HMAC-SM3 回归测试向量
 │   └── sm4.json               # SM4 ECB/CBC 测试向量
 ├── tests/
 │   ├── test_sm3.py            # SM3 单元与集成测试
+│   ├── test_hmac_sm3.py       # HMAC-SM3 向量执行器测试
 │   ├── test_sm4.py            # SM4 单元与集成测试
+│   ├── test_gmcrypto.py        # 普通用户 SM3/HMAC-SM3 测试
 │   └── test_runner_dispatch.py # 统一入口分派测试
 ├── examples/
 │   └── message.txt            # SM3 文件摘要实验输入
 ├── docs/
 │   ├── usage-guide.md         # 本说明书
 │   ├── sm3-experiment.md      # SM3 实验记录
+│   ├── hmac-sm3-experiment.md # HMAC-SM3 实验记录
 │   └── sm4-experiment.md      # SM4 实验记录
 └── results/                   # 预留的结果输出目录
 ```
@@ -193,6 +199,28 @@ python gmcrypto.py sm3 --text "示例" --encoding utf-8
 ```powershell
 python gmcrypto.py sm3 --file examples\message.txt --openssl "C:\完整路径\openssl.exe"
 ```
+
+生成 HMAC-SM3 tag：
+
+```powershell
+python gmcrypto.py hmac-sm3 --key-hex 00112233445566778899aabbccddeeff --text "abc"
+```
+
+验证已有 tag：
+
+```powershell
+python gmcrypto.py hmac-sm3 --key-hex 00112233445566778899aabbccddeeff --text "abc" --verify 0933617a88d312f6f9fb4b5f200e31a64d655e92f7fa2a43f55dfeeb8ab6788d
+```
+
+HMAC-SM3 同样支持 `--hex` 和 `--file`。生成模式输出 64 个十六进制字符；验证成功输出 `OK` 并返回 `0`，验证失败输出 `FAIL` 并返回 `1`。输入或环境错误返回 `2`。
+
+运行 HMAC-SM3 JSON 回归向量：
+
+```powershell
+python runner.py vectors\hmac-sm3.json
+```
+
+该文件当前包含 1 个由 OpenSSL 1.1.1i 生成的回归向量，尚待独立实现交叉验证，不标记为官方标准向量。
 
 ## 6. 运行 SM3 验证
 
@@ -422,17 +450,19 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 33 项测试：
+当前共有 50 项测试：
 
 - 9 项 SM3 测试
 - 14 项 SM4 测试
-- 3 项统一入口分派测试
-- 7 项 `gmcrypto.py` 普通用户 CLI 测试
+- 7 项 `gmcrypto.py` 普通用户 SM3 CLI 测试
+- 8 项 HMAC-SM3 CLI 测试
+- 8 项 HMAC-SM3 向量执行器测试
+- 4 项统一入口分派测试
 
 当前预期结果：
 
 ```text
-Ran 33 tests in ...
+Ran 50 tests in ...
 
 OK
 ```
@@ -476,7 +506,7 @@ python -m unittest tests.test_runner_dispatch -v
 | `extract_tests()` | 提取并校验 SM3 测试用例 |
 | `sm3_digest()` | 调用 OpenSSL 计算 SM3 |
 | `run_tests()` | 执行 SM3 测试并汇总结果 |
-| `run_document()` | 根据算法名称分派 SM3 或 SM4 |
+| `run_document()` | 根据算法名称分派 SM3、HMAC-SM3 或 SM4 |
 | `main()` | 统一程序入口和错误处理 |
 
 ### 11.2 `gmcrypto.py`
@@ -484,6 +514,7 @@ python -m unittest tests.test_runner_dispatch -v
 主要职责：
 
 - 为普通用户提供文本、十六进制和文件三种 SM3 输入方式
+- 生成和验证 HMAC-SM3 tag
 - 明确处理文本编码和十六进制错误
 - 对文件调用 OpenSSL 文件接口，避免 Python 整体读取
 - 只输出摘要，便于脚本继续处理
@@ -496,6 +527,8 @@ python -m unittest tests.test_runner_dispatch -v
 | `encode_text()` | 按指定编码转换文本 |
 | `sm3_file_digest()` | 计算文件 SM3 摘要 |
 | `run_sm3()` | 选择文本、十六进制或文件输入 |
+| `hmac_sm3()` | 调用 OpenSSL 生成 HMAC-SM3 tag |
+| `run_hmac_sm3()` | 生成 tag 或使用恒定时间比较进行验证 |
 | `main()` | 普通用户命令入口和错误处理 |
 
 ### 11.3 `sm4_runner.py`
@@ -609,6 +642,7 @@ abc
 - 当前 SM4 执行器没有 padding，不能直接处理任意长度文本和文件。
 - 测试向量通过只证明所测试输入输出一致，不代表整个实现经过安全认证。
 - 不要在仓库、JSON、命令历史或测试代码中保存真实生产密钥。
+- `--key-hex` 会出现在 shell 历史和进程参数中，只适合本地学习实验。
 
 ## 15. 推荐日常流程
 
@@ -638,7 +672,7 @@ git commit -m "描述本次修改"
 2. 使用 OpenSSL EVP API 编写 C 语言后端。
 3. 使用同一批向量交叉验证 Python 和 C 后端。
 4. 增加 GmSSL 后端。
-5. 研究 HMAC-SM3。
+5. 为 HMAC-SM3 增加独立标准向量和更安全的密钥输入方式。
 6. 设计带 padding、随机 IV 和完整性认证的文件加密实验。
 7. 增加 SM2 密钥生成、签名、验签和加解密实验。
 8. 逐步适配更接近 ACVP 的 JSON 能力描述与结果格式。

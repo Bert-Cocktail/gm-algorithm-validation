@@ -14,6 +14,8 @@ import runner
 
 ABC_DIGEST = "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0"
 EMPTY_DIGEST = "1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b"
+HMAC_KEY = "00112233445566778899aabbccddeeff"
+ABC_HMAC = "0933617a88d312f6f9fb4b5f200e31a64d655e92f7fa2a43f55dfeeb8ab6788d"
 
 
 class TestGmcryptoSm3(unittest.TestCase):
@@ -84,6 +86,107 @@ class TestGmcryptoSm3(unittest.TestCase):
 
         self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
         self.assertIn("file not found", errors)
+
+
+class TestGmcryptoHmacSm3(unittest.TestCase):
+    def run_command(self, arguments: list[str]) -> tuple[int, str, str]:
+        output = io.StringIO()
+        errors = io.StringIO()
+        result = gmcrypto.main(arguments, output=output, error_output=errors)
+        return result, output.getvalue().strip(), errors.getvalue().strip()
+
+    def test_text_tag(self) -> None:
+        result, tag, errors = self.run_command(
+            ["hmac-sm3", "--key-hex", HMAC_KEY, "--text", "abc"]
+        )
+
+        self.assertEqual(result, gmcrypto.EXIT_SUCCESS)
+        self.assertEqual(tag, ABC_HMAC)
+        self.assertEqual(errors, "")
+
+    def test_hex_tag(self) -> None:
+        result, tag, _errors = self.run_command(
+            ["hmac-sm3", "--key-hex", HMAC_KEY, "--hex", "616263"]
+        )
+
+        self.assertEqual(result, gmcrypto.EXIT_SUCCESS)
+        self.assertEqual(tag, ABC_HMAC)
+
+    def test_file_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "message.bin"
+            path.write_bytes(b"abc")
+
+            result, tag, _errors = self.run_command(
+                ["hmac-sm3", "--key-hex", HMAC_KEY, "--file", str(path)]
+            )
+
+        self.assertEqual(result, gmcrypto.EXIT_SUCCESS)
+        self.assertEqual(tag, ABC_HMAC)
+
+    def test_verify_success(self) -> None:
+        result, status, _errors = self.run_command(
+            [
+                "hmac-sm3",
+                "--key-hex",
+                HMAC_KEY,
+                "--text",
+                "abc",
+                "--verify",
+                ABC_HMAC.upper(),
+            ]
+        )
+
+        self.assertEqual(result, gmcrypto.EXIT_SUCCESS)
+        self.assertEqual(status, "OK")
+
+    def test_verify_failure(self) -> None:
+        result, status, _errors = self.run_command(
+            [
+                "hmac-sm3",
+                "--key-hex",
+                HMAC_KEY,
+                "--text",
+                "changed",
+                "--verify",
+                ABC_HMAC,
+            ]
+        )
+
+        self.assertEqual(result, gmcrypto.EXIT_VERIFY_FAILURE)
+        self.assertEqual(status, "FAIL")
+
+    def test_invalid_key_hex(self) -> None:
+        result, _tag, errors = self.run_command(
+            ["hmac-sm3", "--key-hex", "zz", "--text", "abc"]
+        )
+
+        self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+        self.assertIn("non-hexadecimal", errors)
+
+    def test_empty_key_is_rejected(self) -> None:
+        result, _tag, errors = self.run_command(
+            ["hmac-sm3", "--key-hex", "", "--text", "abc"]
+        )
+
+        self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+        self.assertIn("must not be empty", errors)
+
+    def test_invalid_verify_tag_length(self) -> None:
+        result, _status, errors = self.run_command(
+            [
+                "hmac-sm3",
+                "--key-hex",
+                HMAC_KEY,
+                "--text",
+                "abc",
+                "--verify",
+                "00",
+            ]
+        )
+
+        self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+        self.assertIn("exactly 32 bytes", errors)
 
 
 if __name__ == "__main__":
