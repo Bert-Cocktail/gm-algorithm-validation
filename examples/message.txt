@@ -1,0 +1,4 @@
+SM3 experiment message
+
+This file is used to observe how a small change in the input affects the SM3 digest.
+Change one character, calculate the digest again, and then restore the original content.
