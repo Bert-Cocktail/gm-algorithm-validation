@@ -58,9 +58,22 @@ python runner.py vectors\sm3.json
 
 使用标准输入和二进制输出可以避免 PowerShell 管道附加换行、文本编码转换或 OpenSSL 文本输出格式影响验证结果。
 
-## 5. 标准向量结果
+## 5. 正式向量结果
 
-当前 `vectors/sm3.json` 包含消息 `abc` 的标准测试向量：
+当前 `vectors/sm3.json` 包含 8 个测试向量：
+
+| tcId | 消息 | 来源类型 | 测试目的 |
+|---:|---|---|---|
+| 1 | `abc` | `standard` | 验证基础标准输出 |
+| 2 | `abcd` 重复 16 次 | `standard` | 验证 64 byte 标准消息 |
+| 3 | 空消息 | `regression` | 验证零长度输入 |
+| 4 | 55 byte 全零 | `regression` | 验证单个填充分组边界 |
+| 5 | 56 byte 全零 | `regression` | 验证填充增加新分组的边界 |
+| 6 | 63 byte 全零 | `regression` | 验证接近完整分组的输入 |
+| 7 | 64 byte 全零 | `regression` | 验证一个完整消息分组 |
+| 8 | 65 byte 全零 | `regression` | 验证跨分组输入 |
+
+其中消息 `abc` 的标准测试向量为：
 
 ```text
 消息文本：abc
@@ -78,11 +91,18 @@ python runner.py vectors\sm3.json
 
 ```text
 [PASS] tcId=1
+[PASS] tcId=2
+[PASS] tcId=3
+[PASS] tcId=4
+[PASS] tcId=5
+[PASS] tcId=6
+[PASS] tcId=7
+[PASS] tcId=8
 
-Total: 1, Passed: 1, Failed: 0
+Total: 8, Passed: 8, Failed: 0
 ```
 
-说明本机 OpenSSL 对该标准向量的计算结果与预期值一致，同时 JSON 解析、字节转换和结果比较链路能够正常工作。
+两个标准向量来自 `GB/T 32905-2016`。其余六个边界摘要由 OpenSSL 1.1.1i 生成，用于版本回归，并已标注等待独立实现交叉验证。全部通过说明当前 JSON 解析、边界长度、字节转换和结果比较链路能够正常工作。
 
 ## 6. 单元测试结果
 
@@ -154,7 +174,7 @@ SM3 experiment Message
 
 ## 8. 实验结论
 
-本实验完成了一个可复现的 SM3 最小验证闭环。标准向量和三组真实 OpenSSL 摘要测试均通过，输入校验、失败结果和环境错误路径也经过单元测试。
+本实验完成了一个可复现的 SM3 验证闭环。2 个标准向量和 6 个边界回归向量全部通过，输入校验、失败结果和环境错误路径也经过单元测试。
 
 同时需要注意：
 

@@ -96,6 +96,8 @@ Ciphertext: 681edf34d206965e86b3e94f536e4246
 
 - `tcId=1`：使用密钥加密明文，结果应为标准密文。
 - `tcId=2`：使用同一密钥解密标准密文，结果应恢复原文。
+- `tcId=5`：加密两个相同明文分组，得到两个相同密文分组。
+- `tcId=6`：解密两个相同密文分组，恢复两个相同明文分组。
 
 ECB 直接、独立地加密每个分组。相同密钥下，相同明文分组会产生相同密文分组，因此会暴露重复结构。这里使用 ECB 是为了验证 SM4 单分组算法，不是推荐实际系统采用 ECB。
 
@@ -117,17 +119,21 @@ Plaintext: 0123456789abcdeffedcba9876543210
 Ciphertext:a9a268883a336315bac0c9c9ff350ab1
 ```
 
-`tcId=3` 验证 CBC 加密，`tcId=4` 验证 CBC 解密。该密文是本次实验使用本地 OpenSSL 得到的实验向量，不作为独立国标测试向量。
+`tcId=3`、`tcId=4` 验证单分组 CBC 加密和解密。`tcId=7`、`tcId=8` 验证两个相同明文分组的 CBC 加密和解密。CBC 密文由本地 OpenSSL 1.1.1i 得到，用作实验和回归，不能表述为独立国标测试向量。
 
 实际执行结果：
 
 ```text
 [PASS] tcId=1 mode=ECB direction=encrypt
+[PASS] tcId=5 mode=ECB direction=encrypt
 [PASS] tcId=2 mode=ECB direction=decrypt
+[PASS] tcId=6 mode=ECB direction=decrypt
 [PASS] tcId=3 mode=CBC direction=encrypt
+[PASS] tcId=7 mode=CBC direction=encrypt
 [PASS] tcId=4 mode=CBC direction=decrypt
+[PASS] tcId=8 mode=CBC direction=decrypt
 
-Total: 4, Passed: 4, Failed: 0
+Total: 8, Passed: 8, Failed: 0
 ```
 
 ## 8. IV 对比实验
@@ -209,7 +215,7 @@ OK
 
 ## 12. 实验结论
 
-本实验完成了基于 OpenSSL 的 SM4-ECB 和 SM4-CBC 最小验证闭环。两个 ECB 国标用例和两个 CBC 本地实验用例全部通过，14 项 SM4 单元测试以及原有 9 项 SM3 测试均通过。
+本实验完成了基于 OpenSSL 的 SM4-ECB 和 SM4-CBC 验证闭环。2 个 ECB 国标用例、2 个 ECB 推导用例和 4 个 CBC 本地实验用例全部通过，14 项 SM4 单元测试以及原有 9 项 SM3 测试均通过。
 
 实验验证了 SM4 的 128 bit 密钥与分组约束、ECB 单分组输出、CBC 加解密往返以及 IV 对密文的影响。当前成果是算法测试向量执行器，还不是面向实际文件的完整加密方案。
 

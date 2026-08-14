@@ -179,11 +179,18 @@ python runner.py vectors\sm3.json
 
 ```text
 [PASS] tcId=1
+[PASS] tcId=2
+[PASS] tcId=3
+[PASS] tcId=4
+[PASS] tcId=5
+[PASS] tcId=6
+[PASS] tcId=7
+[PASS] tcId=8
 
-Total: 1, Passed: 1, Failed: 0
+Total: 8, Passed: 8, Failed: 0
 ```
 
-当前正式 JSON 文件包含消息 `abc`：
+当前正式 JSON 文件包含 8 个用例，其中消息 `abc` 示例为：
 
 ```text
 文本：abc
@@ -196,6 +203,8 @@ Total: 1, Passed: 1, Failed: 0
 ```text
 66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0
 ```
+
+向量由 2 个国标向量和 6 个边界回归向量组成。边界输入为空消息及 55、56、63、64、65 byte 全零消息；其摘要由 OpenSSL 1.1.1i 生成，等待独立实现交叉验证。
 
 ### 6.1 SM3 JSON 格式
 
@@ -244,11 +253,15 @@ python runner.py vectors\sm4.json
 
 ```text
 [PASS] tcId=1 mode=ECB direction=encrypt
+[PASS] tcId=5 mode=ECB direction=encrypt
 [PASS] tcId=2 mode=ECB direction=decrypt
+[PASS] tcId=6 mode=ECB direction=decrypt
 [PASS] tcId=3 mode=CBC direction=encrypt
+[PASS] tcId=7 mode=CBC direction=encrypt
 [PASS] tcId=4 mode=CBC direction=decrypt
+[PASS] tcId=8 mode=CBC direction=decrypt
 
-Total: 4, Passed: 4, Failed: 0
+Total: 8, Passed: 8, Failed: 0
 ```
 
 也可以使用兼容入口：
@@ -309,6 +322,8 @@ python sm4_runner.py vectors\sm4.json
 
 加密测试以 `pt` 为输入、`ct` 为预期输出。解密测试以 `ct` 为输入、`pt` 为预期输出。
 
+当前 8 个 SM4 用例包括 2 个 ECB 国标单分组向量、2 个 ECB 两分组推导向量，以及 4 个 CBC 单分组/两分组实验向量。两个相同明文分组在 ECB 中产生相同密文分组，在 CBC 中产生不同密文分组。
+
 ## 8. 指定 OpenSSL 路径
 
 默认情况下，程序从系统 `PATH` 查找 `openssl`。
@@ -328,7 +343,8 @@ python runner.py vectors\sm4.json --openssl "C:\完整路径\openssl.exe"
 
 ```text
 [PASS] tcId=1
-Total: 1, Passed: 1, Failed: 0
+...
+Total: 8, Passed: 8, Failed: 0
 ```
 
 退出码：

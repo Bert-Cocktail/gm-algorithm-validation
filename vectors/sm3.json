@@ -1,15 +1,80 @@
 {
   "algorithm": "SM3",
-  "source": "GB/T 32905-2016",
+  "description": "SM3 standard and regression test vectors",
   "testGroups": [
     {
       "tests": [
         {
           "tcId": 1,
-          "description": "abc standard vector",
+          "description": "SM3 digest of abc",
+          "sourceType": "standard",
+          "source": "GB/T 32905-2016",
           "msg": "616263",
           "msgLen": 24,
           "md": "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0"
+        },
+        {
+          "tcId": 2,
+          "description": "SM3 digest of abcd repeated 16 times",
+          "sourceType": "standard",
+          "source": "GB/T 32905-2016",
+          "msg": "61626364616263646162636461626364616263646162636461626364616263646162636461626364616263646162636461626364616263646162636461626364",
+          "msgLen": 512,
+          "md": "debe9ff92275b8a138604889c18e5a4d6fdb70e5387e5765293dcba39c0c5732"
+        },
+        {
+          "tcId": 3,
+          "description": "SM3 digest of empty message",
+          "sourceType": "regression",
+          "source": "OpenSSL 1.1.1i; independent verification pending",
+          "msg": "",
+          "msgLen": 0,
+          "md": "1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b"
+        },
+        {
+          "tcId": 4,
+          "description": "SM3 digest of 55 zero bytes",
+          "sourceType": "regression",
+          "source": "OpenSSL 1.1.1i; independent verification pending",
+          "msg": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "msgLen": 440,
+          "md": "2cdce3d697af3716a9b3cdf068b43e513846e17cc9fd427929aad70165f21dda"
+        },
+        {
+          "tcId": 5,
+          "description": "SM3 digest of 56 zero bytes",
+          "sourceType": "regression",
+          "source": "OpenSSL 1.1.1i; independent verification pending",
+          "msg": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "msgLen": 448,
+          "md": "87b81af2b2b22cbdf268e211d012d604892d3c948ff298d61d6c942eee847f86"
+        },
+        {
+          "tcId": 6,
+          "description": "SM3 digest of 63 zero bytes",
+          "sourceType": "regression",
+          "source": "OpenSSL 1.1.1i; independent verification pending",
+          "msg": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "msgLen": 504,
+          "md": "5241dc10cb3c700e46446943d27b971fefa7e88115f866d6f83d502ff1bc06c2"
+        },
+        {
+          "tcId": 7,
+          "description": "SM3 digest of 64 zero bytes",
+          "sourceType": "regression",
+          "source": "OpenSSL 1.1.1i; independent verification pending",
+          "msg": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "msgLen": 512,
+          "md": "46b58571be41685c253194d20ec7f82b659cc8c6b753f26d4e9ec85bc91c231e"
+        },
+        {
+          "tcId": 8,
+          "description": "SM3 digest of 65 zero bytes",
+          "sourceType": "regression",
+          "source": "OpenSSL 1.1.1i; independent verification pending",
+          "msg": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "msgLen": 520,
+          "md": "b1f76e2d1d41d6f1bb3b09c09b8219dafbad700df2482220c892be41445a22ff"
         }
       ]
     }

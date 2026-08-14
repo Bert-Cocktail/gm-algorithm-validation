@@ -1,6 +1,6 @@
 {
   "algorithm": "SM4",
-  "source": "GB/T 32907-2016 and local OpenSSL CBC experiment",
+  "description": "SM4 standard, derived and experimental test vectors",
   "testGroups": [
     {
       "mode": "ECB",
@@ -8,9 +8,21 @@
       "tests": [
         {
           "tcId": 1,
+          "description": "SM4 standard single-block encryption",
+          "sourceType": "standard",
+          "source": "GB/T 32907-2016",
           "key": "0123456789abcdeffedcba9876543210",
           "pt": "0123456789abcdeffedcba9876543210",
           "ct": "681edf34d206965e86b3e94f536e4246"
+        },
+        {
+          "tcId": 5,
+          "description": "SM4-ECB encryption of two identical blocks",
+          "sourceType": "derived",
+          "source": "Derived from the GB/T 32907-2016 single-block vector and ECB block independence",
+          "key": "0123456789abcdeffedcba9876543210",
+          "pt": "0123456789abcdeffedcba98765432100123456789abcdeffedcba9876543210",
+          "ct": "681edf34d206965e86b3e94f536e4246681edf34d206965e86b3e94f536e4246"
         }
       ]
     },
@@ -20,9 +32,21 @@
       "tests": [
         {
           "tcId": 2,
+          "description": "SM4 standard single-block decryption",
+          "sourceType": "standard",
+          "source": "GB/T 32907-2016",
           "key": "0123456789abcdeffedcba9876543210",
           "pt": "0123456789abcdeffedcba9876543210",
           "ct": "681edf34d206965e86b3e94f536e4246"
+        },
+        {
+          "tcId": 6,
+          "description": "SM4-ECB decryption of two identical blocks",
+          "sourceType": "derived",
+          "source": "Derived from the GB/T 32907-2016 single-block vector and ECB block independence",
+          "key": "0123456789abcdeffedcba9876543210",
+          "pt": "0123456789abcdeffedcba98765432100123456789abcdeffedcba9876543210",
+          "ct": "681edf34d206965e86b3e94f536e4246681edf34d206965e86b3e94f536e4246"
         }
       ]
     },
@@ -32,10 +56,23 @@
       "tests": [
         {
           "tcId": 3,
+          "description": "SM4-CBC one-block local encryption experiment",
+          "sourceType": "experiment",
+          "source": "Local OpenSSL 1.1.1i experiment",
           "key": "0123456789abcdeffedcba9876543210",
           "iv": "000102030405060708090a0b0c0d0e0f",
           "pt": "0123456789abcdeffedcba9876543210",
           "ct": "a9a268883a336315bac0c9c9ff350ab1"
+        },
+        {
+          "tcId": 7,
+          "description": "SM4-CBC encryption of two identical plaintext blocks",
+          "sourceType": "experiment",
+          "source": "Local OpenSSL 1.1.1i experiment; independent verification pending",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "0123456789abcdeffedcba98765432100123456789abcdeffedcba9876543210",
+          "ct": "a9a268883a336315bac0c9c9ff350ab1b236a4a85616d4aabf0a83555c7d4115"
         }
       ]
     },
@@ -45,10 +82,23 @@
       "tests": [
         {
           "tcId": 4,
+          "description": "SM4-CBC one-block local decryption experiment",
+          "sourceType": "experiment",
+          "source": "Local OpenSSL 1.1.1i experiment",
           "key": "0123456789abcdeffedcba9876543210",
           "iv": "000102030405060708090a0b0c0d0e0f",
           "pt": "0123456789abcdeffedcba9876543210",
           "ct": "a9a268883a336315bac0c9c9ff350ab1"
+        },
+        {
+          "tcId": 8,
+          "description": "SM4-CBC decryption of two-block local experiment vector",
+          "sourceType": "experiment",
+          "source": "Local OpenSSL 1.1.1i experiment; independent verification pending",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "0123456789abcdeffedcba98765432100123456789abcdeffedcba9876543210",
+          "ct": "a9a268883a336315bac0c9c9ff350ab1b236a4a85616d4aabf0a83555c7d4115"
         }
       ]
     }

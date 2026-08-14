@@ -80,7 +80,7 @@ openssl list -cipher-algorithms | Select-String SM4
 cd C:\Users\16256\Documents\密码学\gm-algorithm-validation
 ```
 
-运行 SM3 标准向量：
+运行 SM3 标准与边界回归向量：
 
 ```powershell
 python runner.py vectors\sm3.json
@@ -90,8 +90,15 @@ python runner.py vectors\sm3.json
 
 ```text
 [PASS] tcId=1
+[PASS] tcId=2
+[PASS] tcId=3
+[PASS] tcId=4
+[PASS] tcId=5
+[PASS] tcId=6
+[PASS] tcId=7
+[PASS] tcId=8
 
-Total: 1, Passed: 1, Failed: 0
+Total: 8, Passed: 8, Failed: 0
 ```
 
 统一入口会根据 JSON 中的 `algorithm` 字段自动选择 SM3 或 SM4。运行 SM4 向量：
@@ -104,11 +111,15 @@ python runner.py vectors\sm4.json
 
 ```text
 [PASS] tcId=1 mode=ECB direction=encrypt
+[PASS] tcId=5 mode=ECB direction=encrypt
 [PASS] tcId=2 mode=ECB direction=decrypt
+[PASS] tcId=6 mode=ECB direction=decrypt
 [PASS] tcId=3 mode=CBC direction=encrypt
+[PASS] tcId=7 mode=CBC direction=encrypt
 [PASS] tcId=4 mode=CBC direction=decrypt
+[PASS] tcId=8 mode=CBC direction=decrypt
 
-Total: 4, Passed: 4, Failed: 0
+Total: 8, Passed: 8, Failed: 0
 ```
 
 如果 OpenSSL 没有加入 `PATH`，可以显式指定程序路径：
@@ -169,6 +180,8 @@ SM4 测试包括 ECB 国标向量加密与解密、CBC 加解密往返、密钥�
 - `msgLen`：消息的 bit 长度
 - `md`：预期的 256 bit SM3 摘要
 
+当前 `sm3.json` 共 8 个用例：2 个国标向量，以及空消息和 55、56、63、64、65 byte 全零消息组成的 6 个边界回归向量。回归向量由 OpenSSL 1.1.1i 生成，已标注等待独立实现交叉验证。
+
 详细内容参见 [SM3 实验记录](docs/sm3-experiment.md)。
 
 ## SM4 测试向量
@@ -192,14 +205,21 @@ SM4 测试用例示例：
 - `mode`：当前支持 `ECB`、`CBC`
 - `direction`：`encrypt` 或 `decrypt`
 
-`tcId=1` 和 `tcId=2` 使用 `GB/T 32907-2016` 的单分组标准向量。`tcId=3` 和 `tcId=4` 是本地 OpenSSL CBC 实验向量，不应表述为独立国标向量。
+当前 `sm4.json` 共 8 个用例：
+
+- `tcId=1`、`tcId=2`：`GB/T 32907-2016` 单分组标准向量。
+- `tcId=3`、`tcId=4`：本地 OpenSSL 单分组 CBC 实验向量。
+- `tcId=5`、`tcId=6`：根据标准结果和 ECB 分组独立性得到的两分组推导向量。
+- `tcId=7`、`tcId=8`：本地 OpenSSL 两分组 CBC 实验向量，等待独立实现交叉验证。
+
+两个相同明文分组在 ECB 中产生相同密文分组，在 CBC 中产生不同密文分组。
 
 详细内容参见 [SM4 实验记录](docs/sm4-experiment.md)。
 
 ## 当前限制与安全说明
 
 - 当前 SM4 执行器固定使用 `-nopad`，明文和密文必须是 16 byte 的非空整数倍。
-- ECB 仅用于单分组标准向量验证，不适合实际文件或重复结构数据加密。
+- ECB 仅用于标准与推导向量验证，不适合实际文件或重复结构数据加密。
 - CBC 中 IV 不需要保密，但必须正确传递，并应按协议要求生成和避免重复。
 - CBC 本身不提供完整性认证，实际系统需要采用经过审查的认证加密方案或加密加认证结构。
 - 测试向量通过只能说明所测输入输出一致，不能单独证明整个密码库不存在安全漏洞。
