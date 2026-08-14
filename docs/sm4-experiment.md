@@ -199,10 +199,12 @@ python -m unittest discover -s tests -v
 本次实测结果：
 
 ```text
-Ran 26 tests in ...
+Ran 33 tests in ...
 
 OK
 ```
+
+其中 SM4 测试仍为 14 项；新增的 7 项用于验证 `gmcrypto.py` 的 SM3 文本、十六进制和文件入口。
 
 ## 11. 安全性分析
 

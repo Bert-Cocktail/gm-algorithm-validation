@@ -87,6 +87,7 @@ algorithm = SM4 -> 执行 SM4 逻辑
 ```text
 gm-algorithm-validation/
 ├── README.md
+├── gmcrypto.py                # 普通用户命令行工具
 ├── runner.py                  # SM3 实现和统一入口
 ├── sm4_runner.py              # SM4 实现与兼容入口
 ├── vectors/
@@ -165,6 +166,32 @@ python runner.py --help
 
 ```powershell
 python runner.py <测试向量文件> [--openssl <openssl.exe路径>]
+```
+
+普通用户计算 SM3 时使用：
+
+```powershell
+python gmcrypto.py sm3 --text "abc"
+python gmcrypto.py sm3 --hex 616263
+python gmcrypto.py sm3 --file examples\message.txt
+```
+
+三种输入必须且只能选择一种：
+
+- `--text`：文本按指定编码转换成字节，默认 UTF-8。
+- `--hex`：直接提供原始消息字节的十六进制表示。
+- `--file`：由 OpenSSL 直接读取文件，适合大文件。
+
+指定文本编码：
+
+```powershell
+python gmcrypto.py sm3 --text "示例" --encoding utf-8
+```
+
+指定 OpenSSL 路径：
+
+```powershell
+python gmcrypto.py sm3 --file examples\message.txt --openssl "C:\完整路径\openssl.exe"
 ```
 
 ## 6. 运行 SM3 验证
@@ -395,16 +422,17 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 26 项测试：
+当前共有 33 项测试：
 
 - 9 项 SM3 测试
 - 14 项 SM4 测试
 - 3 项统一入口分派测试
+- 7 项 `gmcrypto.py` 普通用户 CLI 测试
 
 当前预期结果：
 
 ```text
-Ran 26 tests in ...
+Ran 33 tests in ...
 
 OK
 ```
@@ -451,7 +479,26 @@ python -m unittest tests.test_runner_dispatch -v
 | `run_document()` | 根据算法名称分派 SM3 或 SM4 |
 | `main()` | 统一程序入口和错误处理 |
 
-### 11.2 `sm4_runner.py`
+### 11.2 `gmcrypto.py`
+
+主要职责：
+
+- 为普通用户提供文本、十六进制和文件三种 SM3 输入方式
+- 明确处理文本编码和十六进制错误
+- 对文件调用 OpenSSL 文件接口，避免 Python 整体读取
+- 只输出摘要，便于脚本继续处理
+
+主要函数：
+
+| 函数 | 作用 |
+|---|---|
+| `decode_hex_message()` | 将十六进制输入转换为原始字节 |
+| `encode_text()` | 按指定编码转换文本 |
+| `sm3_file_digest()` | 计算文件 SM3 摘要 |
+| `run_sm3()` | 选择文本、十六进制或文件输入 |
+| `main()` | 普通用户命令入口和错误处理 |
+
+### 11.3 `sm4_runner.py`
 
 主要职责：
 

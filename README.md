@@ -31,6 +31,7 @@
 ```text
 gm-algorithm-validation/
 ├── README.md
+├── gmcrypto.py
 ├── runner.py
 ├── sm4_runner.py
 ├── vectors/
@@ -79,6 +80,16 @@ openssl list -cipher-algorithms | Select-String SM4
 ```powershell
 cd C:\Users\16256\Documents\密码学\gm-algorithm-validation
 ```
+
+普通用户可以直接计算 SM3：
+
+```powershell
+python gmcrypto.py sm3 --text "abc"
+python gmcrypto.py sm3 --hex 616263
+python gmcrypto.py sm3 --file examples\message.txt
+```
+
+三种方式都输出 64 个十六进制字符的 SM3 摘要。`--text` 默认使用 UTF-8，可通过 `--encoding` 指定其他文本编码；`--file` 由 OpenSSL 直接读取，Python 不会把整个文件载入内存。
 
 运行 SM3 标准与边界回归向量：
 
@@ -145,16 +156,17 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 26 项测试：
+当前共有 33 项测试：
 
 - 9 项 SM3 测试
 - 14 项 SM4 测试
 - 3 项统一入口分派测试
+- 7 项普通用户 CLI 测试
 
 本次实测结果：
 
 ```text
-Ran 26 tests in ...
+Ran 33 tests in ...
 
 OK
 ```
@@ -223,6 +235,7 @@ SM4 测试用例示例：
 - CBC 中 IV 不需要保密，但必须正确传递，并应按协议要求生成和避免重复。
 - CBC 本身不提供完整性认证，实际系统需要采用经过审查的认证加密方案或加密加认证结构。
 - 测试向量通过只能说明所测输入输出一致，不能单独证明整个密码库不存在安全漏洞。
+- `gmcrypto.py` 当前只向普通用户开放 SM3；SM4 在补齐安全文件格式、padding 和完整性认证前仍只用于测试向量实验。
 
 ## 下一步计划
 
