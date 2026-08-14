@@ -65,7 +65,7 @@ SM4-OFB
 运行命令：
 
 ```powershell
-python sm4_runner.py vectors\sm4.json
+python runner.py vectors\sm4.json
 ```
 
 执行器依次完成：
@@ -184,7 +184,7 @@ SM4 共完成 14 项测试：
 | 错误预期密文 | 确认 FAIL 和退出码 | 通过 |
 | OpenSSL 缺失 | 确认环境错误提示 | 通过 |
 
-运行 SM3 和 SM4 全部测试：
+统一入口根据 JSON 的 `algorithm` 字段自动选择 SM3 或 SM4。运行 SM3 和 SM4 全部测试：
 
 ```powershell
 python -m unittest discover -s tests -v
@@ -193,7 +193,7 @@ python -m unittest discover -s tests -v
 本次实测结果：
 
 ```text
-Ran 23 tests in ...
+Ran 26 tests in ...
 
 OK
 ```

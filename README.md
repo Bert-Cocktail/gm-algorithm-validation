@@ -92,10 +92,10 @@ python runner.py vectors\sm3.json
 Total: 1, Passed: 1, Failed: 0
 ```
 
-运行 SM4 向量：
+统一入口会根据 JSON 中的 `algorithm` 字段自动选择 SM3 或 SM4。运行 SM4 向量：
 
 ```powershell
-python sm4_runner.py vectors\sm4.json
+python runner.py vectors\sm4.json
 ```
 
 当前结果：
@@ -113,7 +113,7 @@ Total: 4, Passed: 4, Failed: 0
 
 ```powershell
 python runner.py vectors\sm3.json --openssl "C:\path\to\openssl.exe"
-python sm4_runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
+python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 ```
 
 ## 退出码
@@ -132,15 +132,16 @@ python sm4_runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 23 项测试：
+当前共有 26 项测试：
 
 - 9 项 SM3 测试
 - 14 项 SM4 测试
+- 3 项统一入口分派测试
 
 本次实测结果：
 
 ```text
-Ran 23 tests in ...
+Ran 26 tests in ...
 
 OK
 ```

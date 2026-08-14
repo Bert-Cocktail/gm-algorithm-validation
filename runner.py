@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run SM3 JSON test vectors against the local OpenSSL executable."""
+"""Run supported GM algorithm JSON test vectors with OpenSSL."""
 
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ from collections.abc import Callable, Sequence
 from io import TextIOBase
 from pathlib import Path
 from typing import Any
+
+import sm4_runner
 
 
 EXIT_SUCCESS = 0
@@ -28,9 +30,11 @@ class RunnerError(Exception):
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run SM3 test vectors with OpenSSL."
+        description="Run SM3 or SM4 test vectors with OpenSSL."
     )
-    parser.add_argument("vector_file", type=Path, help="path to an SM3 JSON file")
+    parser.add_argument(
+        "vector_file", type=Path, help="path to an SM3 or SM4 JSON file"
+    )
     parser.add_argument(
         "--openssl",
         default="openssl",
@@ -39,7 +43,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def load_vectors(path: Path) -> dict[str, Any]:
+def load_document(path: Path) -> dict[str, Any]:
     try:
         with path.open("r", encoding="utf-8-sig") as file:
             document = json.load(file)
@@ -54,6 +58,12 @@ def load_vectors(path: Path) -> dict[str, Any]:
 
     if not isinstance(document, dict):
         raise RunnerError("the JSON root must be an object")
+    return document
+
+
+def load_vectors(path: Path) -> dict[str, Any]:
+    """Load an SM3 vector file; retained for direct SM3 use and tests."""
+    document = load_document(path)
     if str(document.get("algorithm", "")).upper() != "SM3":
         raise RunnerError("the 'algorithm' field must be 'SM3'")
     if not isinstance(document.get("testGroups"), list):
@@ -184,14 +194,32 @@ def run_tests(
     return EXIT_SUCCESS if failed == 0 else EXIT_TEST_FAILURE
 
 
+def run_document(document: dict[str, Any], openssl: str) -> int:
+    algorithm = str(document.get("algorithm", "")).upper()
+
+    if algorithm == "SM3":
+        if not isinstance(document.get("testGroups"), list):
+            raise RunnerError("the 'testGroups' field must be an array")
+        return run_tests(extract_tests(document), openssl)
+
+    if algorithm == "SM4":
+        if not isinstance(document.get("testGroups"), list):
+            raise RunnerError("the 'testGroups' field must be an array")
+        return sm4_runner.run_tests(sm4_runner.extract_tests(document), openssl)
+
+    name = algorithm or "<missing>"
+    raise RunnerError(
+        f"unsupported algorithm '{name}'; supported algorithms: SM3, SM4"
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        document = load_vectors(args.vector_file)
-        tests = extract_tests(document)
+        document = load_document(args.vector_file)
         openssl = resolve_openssl(args.openssl)
-        return run_tests(tests, openssl)
-    except RunnerError as error:
+        return run_document(document, openssl)
+    except (RunnerError, sm4_runner.RunnerError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return EXIT_INPUT_ERROR
 
