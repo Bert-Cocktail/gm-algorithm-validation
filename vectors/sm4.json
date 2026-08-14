@@ -1,0 +1,56 @@
+{
+  "algorithm": "SM4",
+  "source": "GB/T 32907-2016 and local OpenSSL CBC experiment",
+  "testGroups": [
+    {
+      "mode": "ECB",
+      "direction": "encrypt",
+      "tests": [
+        {
+          "tcId": 1,
+          "key": "0123456789abcdeffedcba9876543210",
+          "pt": "0123456789abcdeffedcba9876543210",
+          "ct": "681edf34d206965e86b3e94f536e4246"
+        }
+      ]
+    },
+    {
+      "mode": "ECB",
+      "direction": "decrypt",
+      "tests": [
+        {
+          "tcId": 2,
+          "key": "0123456789abcdeffedcba9876543210",
+          "pt": "0123456789abcdeffedcba9876543210",
+          "ct": "681edf34d206965e86b3e94f536e4246"
+        }
+      ]
+    },
+    {
+      "mode": "CBC",
+      "direction": "encrypt",
+      "tests": [
+        {
+          "tcId": 3,
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "0123456789abcdeffedcba9876543210",
+          "ct": "a9a268883a336315bac0c9c9ff350ab1"
+        }
+      ]
+    },
+    {
+      "mode": "CBC",
+      "direction": "decrypt",
+      "tests": [
+        {
+          "tcId": 4,
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "0123456789abcdeffedcba9876543210",
+          "ct": "a9a268883a336315bac0c9c9ff350ab1"
+        }
+      ]
+    }
+  ]
+}
