@@ -47,6 +47,8 @@ gm-algorithm-validation/
 └── results/
 ```
 
+完整的功能、命令、JSON 字段、代码结构和常见错误说明参见 [使用说明书](docs/usage-guide.md)。
+
 `examples/message.txt` 只用于 SM3 文件摘要实验。当前 SM4 实验直接使用 JSON 中的十六进制明文，不需要修改该文件。
 
 ## 环境要求
