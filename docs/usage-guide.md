@@ -50,12 +50,15 @@ SM3 是不可逆的杂凑算法，不是加密算法。
 
 - SM4-ECB 加密和解密
 - SM4-CBC 加密和解密
+- SM4-CTR 加密和解密
 - 128 bit 密钥检查
-- CBC 的 128 bit IV 检查
+- CBC/CTR 的 128 bit IV 检查
 - 明文、密文和密钥的十六进制检查
-- 无 padding 的整分组测试
+- 无 padding 的 ECB/CBC 整分组测试
+- CTR 任意非空整字节长度测试
 - ECB 国标单分组向量验证
 - CBC 加解密往返和固定参数实验向量
+- CTR 20 byte 加解密实验向量
 
 SM4 的基本参数为：
 
@@ -64,15 +67,29 @@ SM4 的基本参数为：
 分组长度：128 bit = 16 byte
 ```
 
-当前执行器固定使用 `-nopad`，因此明文和密文必须是 16 byte 的非空整数倍。
+当前执行器固定使用 `-nopad`。ECB/CBC 的明文和密文必须是 16 byte 的非空整数倍；CTR 不使用 padding，允许任意非空整字节长度。
 
-### 2.3 统一运行入口
+### 2.3 SM4-CTR + HMAC-SM3
+
+当前组合实验支持：
+
+- 使用独立的 16 byte SM4 密钥和 32 byte HMAC 密钥
+- 使用随机 16 byte IV 执行 SM4-CTR 加密
+- 对版本、算法、IV、密文长度和密文计算 HMAC-SM3
+- 使用恒定时间比较验证 tag，并且只在验证成功后解密
+- 检测 IV、密文和 tag 篡改
+
+该接口是学习实验格式，不是经过标准化或安全审计的生产文件格式。
+
+### 2.4 统一运行入口
 
 `runner.py` 会读取 JSON 根对象中的 `algorithm` 字段：
 
 ```text
 algorithm = SM3 -> 执行 SM3 逻辑
+algorithm = HMAC-SM3 -> 执行 HMAC-SM3 逻辑
 algorithm = SM4 -> 执行 SM4 逻辑
+algorithm = SM4-CTR-HMAC-SM3 -> 执行加密认证组合逻辑
 其他值         -> 报告不支持并返回退出码 2
 ```
 
@@ -87,20 +104,37 @@ algorithm = SM4 -> 执行 SM4 逻辑
 ```text
 gm-algorithm-validation/
 ├── README.md
+├── gmcrypto.py                # 普通用户命令行工具
 ├── runner.py                  # SM3 实现和统一入口
+├── hmac_sm3_runner.py         # HMAC-SM3 实现与向量校验
+├── authenticated_sm4.py       # 认证 SM4 格式与编码规则
+├── authenticated_sm4_runner.py # 认证 SM4 向量执行器
+├── gmssl_backend.py            # 独立 GmSSL 交叉验证后端
 ├── sm4_runner.py              # SM4 实现与兼容入口
+├── requirements-dev.txt       # 交叉验证开发依赖
 ├── vectors/
 │   ├── sm3.json               # SM3 测试向量
-│   └── sm4.json               # SM4 ECB/CBC 测试向量
+│   ├── hmac-sm3.json          # HMAC-SM3 回归测试向量
+│   ├── sm4-ctr-hmac-sm3.json  # 认证 SM4-CTR 实验向量
+│   └── sm4.json               # SM4 ECB/CBC/CTR 测试向量
 ├── tests/
 │   ├── test_sm3.py            # SM3 单元与集成测试
+│   ├── test_hmac_sm3.py       # HMAC-SM3 向量执行器测试
+│   ├── test_authenticated_sm4.py # 认证 SM4 格式与编码测试
+│   ├── test_authenticated_sm4_runner.py # 认证 SM4 向量测试
+│   ├── test_cross_validation.py # OpenSSL/GmSSL 交叉验证
+│   ├── test_runner_backends.py # runner 后端选择测试
 │   ├── test_sm4.py            # SM4 单元与集成测试
+│   ├── test_gmcrypto.py        # 普通用户 SM3/HMAC-SM3 测试
 │   └── test_runner_dispatch.py # 统一入口分派测试
 ├── examples/
 │   └── message.txt            # SM3 文件摘要实验输入
 ├── docs/
 │   ├── usage-guide.md         # 本说明书
 │   ├── sm3-experiment.md      # SM3 实验记录
+│   ├── hmac-sm3-experiment.md # HMAC-SM3 实验记录
+│   ├── authenticated-sm4-experiment.md # 认证 SM4 阶段记录
+│   ├── cross-validation.md    # 独立交叉验证记录
 │   └── sm4-experiment.md      # SM4 实验记录
 └── results/                   # 预留的结果输出目录
 ```
@@ -145,6 +179,7 @@ openssl list -cipher-algorithms | Select-String SM4
 SM3
 SM4-ECB
 SM4-CBC
+SM4-CTR
 ```
 
 ## 5. 基本使用方法
@@ -164,8 +199,74 @@ python runner.py --help
 统一命令格式：
 
 ```powershell
-python runner.py <测试向量文件> [--openssl <openssl.exe路径>]
+python runner.py <测试向量文件> [--backend openssl|gmssl|cross] [--openssl <openssl.exe路径>]
 ```
+
+后端说明：
+
+| 后端 | 行为 |
+|---|---|
+| `openssl` | 默认值，只使用 OpenSSL |
+| `gmssl` | 只使用 Python gmssl，不查找 OpenSSL |
+| `cross` | 同时运行两套后端并逐项比较 |
+
+`gmssl` 和 `cross` 需要先安装 `requirements-dev.txt`。`--openssl` 只对 `openssl` 和 `cross` 有效。
+
+普通用户计算 SM3 时使用：
+
+```powershell
+python gmcrypto.py sm3 --text "abc"
+python gmcrypto.py sm3 --hex 616263
+python gmcrypto.py sm3 --file examples\message.txt
+```
+
+三种输入必须且只能选择一种：
+
+- `--text`：文本按指定编码转换成字节，默认 UTF-8。
+- `--hex`：直接提供原始消息字节的十六进制表示。
+- `--file`：由 OpenSSL 直接读取文件，适合大文件。
+
+指定文本编码：
+
+```powershell
+python gmcrypto.py sm3 --text "示例" --encoding utf-8
+```
+
+指定 OpenSSL 路径：
+
+```powershell
+python gmcrypto.py sm3 --file examples\message.txt --openssl "C:\完整路径\openssl.exe"
+```
+
+生成 HMAC-SM3 tag：
+
+```powershell
+python gmcrypto.py hmac-sm3 --key-hex 00112233445566778899aabbccddeeff --text "abc"
+```
+
+验证已有 tag：
+
+```powershell
+python gmcrypto.py hmac-sm3 --key-hex 00112233445566778899aabbccddeeff --text "abc" --verify 0933617a88d312f6f9fb4b5f200e31a64d655e92f7fa2a43f55dfeeb8ab6788d
+```
+
+HMAC-SM3 同样支持 `--hex` 和 `--file`。生成模式输出 64 个十六进制字符；验证成功输出 `OK` 并返回 `0`，验证失败输出 `FAIL` 并返回 `1`。输入或环境错误返回 `2`。
+
+运行 SM4-CTR + HMAC-SM3 组合向量：
+
+```powershell
+python runner.py vectors\sm4-ctr-hmac-sm3.json
+```
+
+统一入口会校验双密钥、IV、明密文长度和 tag，并同时比较加密密文、认证 tag 和解密恢复明文。
+
+运行 HMAC-SM3 JSON 回归向量：
+
+```powershell
+python runner.py vectors\hmac-sm3.json
+```
+
+该文件当前包含 1 个由 OpenSSL 1.1.1i 生成的回归向量，并已使用 Python gmssl 3.2.2 交叉验证；它不标记为官方标准向量。
 
 ## 6. 运行 SM3 验证
 
@@ -179,11 +280,18 @@ python runner.py vectors\sm3.json
 
 ```text
 [PASS] tcId=1
+[PASS] tcId=2
+[PASS] tcId=3
+[PASS] tcId=4
+[PASS] tcId=5
+[PASS] tcId=6
+[PASS] tcId=7
+[PASS] tcId=8
 
-Total: 1, Passed: 1, Failed: 0
+Total: 8, Passed: 8, Failed: 0
 ```
 
-当前正式 JSON 文件包含消息 `abc`：
+当前正式 JSON 文件包含 8 个用例，其中消息 `abc` 示例为：
 
 ```text
 文本：abc
@@ -196,6 +304,8 @@ Total: 1, Passed: 1, Failed: 0
 ```text
 66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0
 ```
+
+向量由 2 个国标向量和 6 个边界回归向量组成。边界输入为空消息及 55、56、63、64、65 byte 全零消息；其摘要由 OpenSSL 1.1.1i 生成，并已使用 Python gmssl 3.2.2 交叉验证。
 
 ### 6.1 SM3 JSON 格式
 
@@ -244,11 +354,17 @@ python runner.py vectors\sm4.json
 
 ```text
 [PASS] tcId=1 mode=ECB direction=encrypt
+[PASS] tcId=5 mode=ECB direction=encrypt
 [PASS] tcId=2 mode=ECB direction=decrypt
+[PASS] tcId=6 mode=ECB direction=decrypt
 [PASS] tcId=3 mode=CBC direction=encrypt
+[PASS] tcId=7 mode=CBC direction=encrypt
 [PASS] tcId=4 mode=CBC direction=decrypt
+[PASS] tcId=8 mode=CBC direction=decrypt
+[PASS] tcId=9 mode=CTR direction=encrypt
+[PASS] tcId=10 mode=CTR direction=decrypt
 
-Total: 4, Passed: 4, Failed: 0
+Total: 10, Passed: 10, Failed: 0
 ```
 
 也可以使用兼容入口：
@@ -294,20 +410,42 @@ python sm4_runner.py vectors\sm4.json
 }
 ```
 
+### 7.3 SM4 CTR JSON 格式
+
+CTR 可以处理非 16 byte 整数倍的数据。以下用例的明文和密文均为 20 byte：
+
+```json
+{
+  "mode": "CTR",
+  "direction": "encrypt",
+  "tests": [
+    {
+      "tcId": 9,
+      "key": "0123456789abcdeffedcba9876543210",
+      "iv": "000102030405060708090a0b0c0d0e0f",
+      "pt": "0123456789abcdeffedcba987654321001020304",
+      "ct": "07bbd906b40da542d4514d1a97fccb7a6e050e4f"
+    }
+  ]
+}
+```
+
 字段说明：
 
 | 字段 | 含义 |
 |---|---|
 | `algorithm` | JSON 根对象中必须为 `SM4` |
-| `mode` | 当前支持 `ECB` 或 `CBC` |
+| `mode` | 当前支持 `ECB`、`CBC` 或 `CTR` |
 | `direction` | `encrypt` 或 `decrypt` |
 | `tcId` | 全文件唯一整数测试编号 |
 | `key` | 16 byte 密钥，共 32 个十六进制字符 |
-| `iv` | CBC 必需的 16 byte IV；ECB 禁止携带 |
-| `pt` | 明文十六进制，长度必须按 16 byte 对齐 |
+| `iv` | CBC/CTR 必需的 16 byte IV/初始计数器；ECB 禁止携带 |
+| `pt` | 明文十六进制；ECB/CBC 按 16 byte 对齐，CTR 可为任意非空整字节长度 |
 | `ct` | 密文十六进制，长度必须与明文相同 |
 
 加密测试以 `pt` 为输入、`ct` 为预期输出。解密测试以 `ct` 为输入、`pt` 为预期输出。
+
+当前 10 个 SM4 用例包括 2 个 ECB 国标单分组向量、2 个 ECB 两分组推导向量、4 个 CBC 实验向量，以及 2 个 CTR 20 byte 实验向量。CBC/CTR 实验向量由 OpenSSL 1.1.1i 生成，并已使用 Python gmssl 3.2.2 交叉验证；它们不作为官方标准向量。
 
 ## 8. 指定 OpenSSL 路径
 
@@ -317,6 +455,8 @@ python sm4_runner.py vectors\sm4.json
 
 ```powershell
 python runner.py vectors\sm3.json --openssl "C:\完整路径\openssl.exe"
+python runner.py vectors\hmac-sm3.json --openssl "C:\完整路径\openssl.exe"
+python runner.py vectors\sm4-ctr-hmac-sm3.json --openssl "C:\完整路径\openssl.exe"
 python runner.py vectors\sm4.json --openssl "C:\完整路径\openssl.exe"
 ```
 
@@ -328,7 +468,8 @@ python runner.py vectors\sm4.json --openssl "C:\完整路径\openssl.exe"
 
 ```text
 [PASS] tcId=1
-Total: 1, Passed: 1, Failed: 0
+...
+Total: N, Passed: N, Failed: 0
 ```
 
 退出码：
@@ -379,16 +520,23 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 26 项测试：
+当前共有 95 项测试：
 
 - 9 项 SM3 测试
-- 14 项 SM4 测试
-- 3 项统一入口分派测试
+- 19 项 SM4 测试
+- 7 项 `gmcrypto.py` 普通用户 SM3 CLI 测试
+- 8 项 HMAC-SM3 CLI 测试
+- 8 项 HMAC-SM3 向量执行器测试
+- 5 项统一入口分派测试
+- 21 项认证 SM4 格式、加解密与篡改测试
+- 6 项认证 SM4 向量执行器测试
+- 7 项 OpenSSL/GmSSL 交叉验证测试
+- 5 项 runner 后端选择测试
 
 当前预期结果：
 
 ```text
-Ran 26 tests in ...
+Ran 95 tests in ...
 
 OK
 ```
@@ -432,14 +580,36 @@ python -m unittest tests.test_runner_dispatch -v
 | `extract_tests()` | 提取并校验 SM3 测试用例 |
 | `sm3_digest()` | 调用 OpenSSL 计算 SM3 |
 | `run_tests()` | 执行 SM3 测试并汇总结果 |
-| `run_document()` | 根据算法名称分派 SM3 或 SM4 |
+| `run_document()` | 根据算法名称分派 SM3、HMAC-SM3、SM4 或认证 SM4 |
 | `main()` | 统一程序入口和错误处理 |
 
-### 11.2 `sm4_runner.py`
+### 11.2 `gmcrypto.py`
 
 主要职责：
 
-- 校验 SM4 ECB/CBC 测试组
+- 为普通用户提供文本、十六进制和文件三种 SM3 输入方式
+- 生成和验证 HMAC-SM3 tag
+- 明确处理文本编码和十六进制错误
+- SM3 文件摘要由 OpenSSL 文件接口读取；HMAC 文件输入读取为字节后复用统一底层函数
+- 只输出摘要，便于脚本继续处理
+
+主要函数：
+
+| 函数 | 作用 |
+|---|---|
+| `decode_hex_message()` | 将十六进制输入转换为原始字节 |
+| `encode_text()` | 按指定编码转换文本 |
+| `sm3_file_digest()` | 计算文件 SM3 摘要 |
+| `run_sm3()` | 选择文本、十六进制或文件输入 |
+| `hmac_sm3_runner.hmac_sm3()` | 调用 OpenSSL 生成 HMAC-SM3 tag |
+| `run_hmac_sm3()` | 生成 tag 或使用恒定时间比较进行验证 |
+| `main()` | 普通用户命令入口和错误处理 |
+
+### 11.3 `sm4_runner.py`
+
+主要职责：
+
+- 校验 SM4 ECB/CBC/CTR 测试组
 - 检查密钥、IV、明文和密文
 - 生成 OpenSSL `enc` 参数
 - 执行 SM4 加密或解密
@@ -468,12 +638,12 @@ python -m unittest tests.test_runner_dispatch -v
 
 ### 12.2 添加 SM4 向量
 
-1. 选择 `ECB` 或 `CBC` 测试组。
+1. 选择 `ECB`、`CBC` 或 `CTR` 测试组。
 2. 选择 `encrypt` 或 `decrypt` 方向。
 3. 使用尚未重复的 `tcId`。
 4. 填写正好 16 byte 的密钥。
-5. CBC 填写正好 16 byte 的 IV。
-6. 确保明文和密文长度相同，并且都是 16 byte 的整数倍。
+5. CBC/CTR 填写正好 16 byte 的 IV；CTR 中该值是初始计数器。
+6. 确保明文和密文长度相同。ECB/CBC 必须是非空 16 byte 整数倍；CTR 可为任意非空整字节长度。
 7. 标注向量来源，不把本地生成结果冒充正式标准向量。
 8. 运行统一入口和全部单元测试。
 
@@ -508,17 +678,19 @@ SM4 密钥必须是：
 16 byte = 32 个十六进制字符
 ```
 
-### 13.3 CBC 缺少 IV
+### 13.3 CBC/CTR 缺少 IV
 
-CBC 测试必须提供 16 byte 的 `iv`。ECB 不使用 IV，也不应出现 `iv` 字段。
+CBC 和 CTR 测试必须提供 16 byte 的 `iv`。ECB 不使用 IV，也不应出现 `iv` 字段。
 
 ### 13.4 明文不是整分组
 
-当前关闭 padding。SM4 明文和密文必须是：
+当前关闭 padding。ECB/CBC 明文和密文必须是：
 
 ```text
 16、32、48、64 ... byte
 ```
+
+CTR 不需要 padding，可以处理任意非空整字节长度，例如 1、15、20 byte。
 
 ### 13.5 文本与十六进制混淆
 
@@ -542,10 +714,12 @@ abc
 - 普通 SM3 摘要不能证明发送者身份；消息认证可研究 HMAC-SM3。
 - SM4-ECB 会暴露重复分组结构，不适合实际文件加密。
 - SM4-CBC 不提供完整性认证，不能单独抵抗主动篡改。
+- SM4-CTR 可处理任意长度，但不提供完整性认证；同一密钥下绝不能重复 IV/初始计数器。
 - 当前固定 IV 仅用于可重复实验，不代表生产系统应固定 IV。
-- 当前 SM4 执行器没有 padding，不能直接处理任意长度文本和文件。
+- CTR 虽然不需要 padding，当前执行器仍缺少安全文件格式、计数器管理和完整性认证，不能直接作为通用文件加密工具。
 - 测试向量通过只证明所测试输入输出一致，不代表整个实现经过安全认证。
 - 不要在仓库、JSON、命令历史或测试代码中保存真实生产密钥。
+- `--key-hex` 会出现在 shell 历史和进程参数中，只适合本地学习实验。
 
 ## 15. 推荐日常流程
 
@@ -553,6 +727,8 @@ abc
 
 ```powershell
 python runner.py vectors\sm3.json
+python runner.py vectors\hmac-sm3.json
+python runner.py vectors\sm4-ctr-hmac-sm3.json
 python runner.py vectors\sm4.json
 python -m unittest discover -s tests -v
 git diff --check
@@ -574,8 +750,8 @@ git commit -m "描述本次修改"
 1. 提取 SM3、SM4 公共的 JSON、OpenSSL 和错误处理模块。
 2. 使用 OpenSSL EVP API 编写 C 语言后端。
 3. 使用同一批向量交叉验证 Python 和 C 后端。
-4. 增加 GmSSL 后端。
-5. 研究 HMAC-SM3。
-6. 设计带 padding、随机 IV 和完整性认证的文件加密实验。
+4. 为后端不一致报告增加更细的用例编号和结构化结果输出。
+5. 为 HMAC-SM3 增加独立标准向量和更安全的密钥输入方式。
+6. 设计带 padding 或 CTR 计数器管理、IV 序列化和完整性认证的文件加密实验。
 7. 增加 SM2 密钥生成、签名、验签和加解密实验。
 8. 逐步适配更接近 ACVP 的 JSON 能力描述与结果格式。

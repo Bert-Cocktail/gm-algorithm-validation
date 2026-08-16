@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Run supported GM algorithm JSON test vectors with OpenSSL."""
+"""Run supported GM algorithm vectors with selectable crypto backends."""
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import re
 import shutil
@@ -15,6 +16,9 @@ from pathlib import Path
 from typing import Any
 
 import sm4_runner
+import hmac_sm3_runner
+import authenticated_sm4
+import authenticated_sm4_runner
 
 
 EXIT_SUCCESS = 0
@@ -25,15 +29,28 @@ HEX_RE = re.compile(r"^[0-9a-fA-F]*$")
 
 
 class RunnerError(Exception):
-    """Raised for invalid input or an unavailable OpenSSL backend."""
+    """Raised for invalid input or an unavailable crypto backend."""
+
+
+class CrossBackendMismatch(Exception):
+    """Raised when OpenSSL and GmSSL return different results."""
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run SM3 or SM4 test vectors with OpenSSL."
+        description=(
+            "Run SM3, HMAC-SM3, SM4, or authenticated SM4 test vectors "
+            "with OpenSSL, GmSSL, or both."
+        )
     )
     parser.add_argument(
-        "vector_file", type=Path, help="path to an SM3 or SM4 JSON file"
+        "vector_file", type=Path, help="path to a supported JSON vector file"
+    )
+    parser.add_argument(
+        "--backend",
+        choices=("openssl", "gmssl", "cross"),
+        default="openssl",
+        help="crypto backend (default: openssl)",
     )
     parser.add_argument(
         "--openssl",
@@ -41,6 +58,158 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="OpenSSL executable name or path (default: openssl)",
     )
     return parser.parse_args(argv)
+
+
+def _load_gmssl_backend() -> Any:
+    try:
+        return importlib.import_module("gmssl_backend")
+    except ImportError as error:
+        raise RunnerError(
+            "the GmSSL backend is unavailable. Activate the project virtual "
+            "environment and run: python -m pip install -r requirements-dev.txt"
+        ) from error
+
+
+def _compare_backend_results(operation: str, openssl_result: Any, gmssl_result: Any) -> Any:
+    if openssl_result != gmssl_result:
+        def display(value: Any) -> str:
+            return value.hex() if isinstance(value, bytes) else str(value)
+
+        raise CrossBackendMismatch(
+            f"{operation}: OpenSSL={display(openssl_result)}, "
+            f"GmSSL={display(gmssl_result)}"
+        )
+    return openssl_result
+
+
+def _digest_function(backend: str) -> Callable[[str, bytes], str]:
+    if backend == "openssl":
+        return sm3_digest
+
+    gmssl = _load_gmssl_backend()
+
+    def gmssl_digest(_command: str, message: bytes) -> str:
+        return gmssl.gmssl_sm3(message)
+
+    if backend == "gmssl":
+        return gmssl_digest
+
+    def cross_digest(command: str, message: bytes) -> str:
+        return _compare_backend_results(
+            "SM3",
+            sm3_digest(command, message),
+            gmssl_digest(command, message),
+        )
+
+    return cross_digest
+
+
+def _hmac_function(backend: str) -> Callable[[str, str, bytes], str]:
+    if backend == "openssl":
+        return hmac_sm3_runner.hmac_sm3
+
+    gmssl = _load_gmssl_backend()
+
+    def gmssl_hmac(_command: str, key_hex: str, message: bytes) -> str:
+        return gmssl.gmssl_hmac_sm3(bytes.fromhex(key_hex), message)
+
+    if backend == "gmssl":
+        return gmssl_hmac
+
+    def cross_hmac(command: str, key_hex: str, message: bytes) -> str:
+        return _compare_backend_results(
+            "HMAC-SM3",
+            hmac_sm3_runner.hmac_sm3(command, key_hex, message),
+            gmssl_hmac(command, key_hex, message),
+        )
+
+    return cross_hmac
+
+
+def _crypt_function(
+    backend: str,
+) -> Callable[[str, str, str, str, Any, bytes], bytes]:
+    if backend == "openssl":
+        return sm4_runner.sm4_crypt
+
+    gmssl = _load_gmssl_backend()
+
+    def gmssl_crypt(
+        _command: str,
+        mode: str,
+        direction: str,
+        key_hex: str,
+        iv_hex: Any,
+        data: bytes,
+    ) -> bytes:
+        return gmssl.gmssl_sm4_crypt(
+            mode,
+            direction,
+            bytes.fromhex(key_hex),
+            bytes.fromhex(iv_hex) if iv_hex is not None else None,
+            data,
+        )
+
+    if backend == "gmssl":
+        return gmssl_crypt
+
+    def cross_crypt(
+        command: str,
+        mode: str,
+        direction: str,
+        key_hex: str,
+        iv_hex: Any,
+        data: bytes,
+    ) -> bytes:
+        return _compare_backend_results(
+            f"SM4-{mode} {direction}",
+            sm4_runner.sm4_crypt(
+                command, mode, direction, key_hex, iv_hex, data
+            ),
+            gmssl_crypt(command, mode, direction, key_hex, iv_hex, data),
+        )
+
+    return cross_crypt
+
+
+def _authenticated_functions(backend: str) -> tuple[Callable[..., Any], Callable[..., bytes]]:
+    crypt_fn = _crypt_function(backend)
+    hmac_fn = _hmac_function(backend)
+
+    def encrypt(
+        command: str,
+        sm4_key_hex: str,
+        hmac_key_hex: str,
+        plaintext: bytes,
+        *,
+        iv: bytes | None = None,
+    ) -> authenticated_sm4.AuthenticatedPackage:
+        return authenticated_sm4.encrypt_and_authenticate(
+            command,
+            sm4_key_hex,
+            hmac_key_hex,
+            plaintext,
+            iv=iv,
+            crypt_fn=crypt_fn,
+            hmac_fn=hmac_fn,
+        )
+
+    def decrypt(
+        command: str,
+        sm4_key_hex: str,
+        hmac_key_hex: str,
+        package: Any,
+    ) -> bytes:
+        return authenticated_sm4.verify_and_decrypt(
+            command,
+            sm4_key_hex,
+            hmac_key_hex,
+            package,
+            crypt_fn=crypt_fn,
+            hmac_fn=hmac_fn,
+        )
+
+    return encrypt, decrypt
 
 
 def load_document(path: Path) -> dict[str, Any]:
@@ -194,22 +363,49 @@ def run_tests(
     return EXIT_SUCCESS if failed == 0 else EXIT_TEST_FAILURE
 
 
-def run_document(document: dict[str, Any], openssl: str) -> int:
+def run_document(
+    document: dict[str, Any], openssl: str, *, backend: str = "openssl"
+) -> int:
     algorithm = str(document.get("algorithm", "")).upper()
 
     if algorithm == "SM3":
         if not isinstance(document.get("testGroups"), list):
             raise RunnerError("the 'testGroups' field must be an array")
-        return run_tests(extract_tests(document), openssl)
+        return run_tests(
+            extract_tests(document),
+            openssl,
+            digest_fn=_digest_function(backend),
+        )
 
     if algorithm == "SM4":
         if not isinstance(document.get("testGroups"), list):
             raise RunnerError("the 'testGroups' field must be an array")
-        return sm4_runner.run_tests(sm4_runner.extract_tests(document), openssl)
+        return sm4_runner.run_tests(
+            sm4_runner.extract_tests(document),
+            openssl,
+            crypt_fn=_crypt_function(backend),
+        )
+
+    if algorithm == "HMAC-SM3":
+        return hmac_sm3_runner.run_tests(
+            hmac_sm3_runner.extract_tests(document),
+            openssl,
+            hmac_fn=_hmac_function(backend),
+        )
+
+    if algorithm == "SM4-CTR-HMAC-SM3":
+        encrypt_fn, decrypt_fn = _authenticated_functions(backend)
+        return authenticated_sm4_runner.run_tests(
+            authenticated_sm4_runner.extract_tests(document),
+            openssl,
+            encrypt_fn=encrypt_fn,
+            decrypt_fn=decrypt_fn,
+        )
 
     name = algorithm or "<missing>"
     raise RunnerError(
-        f"unsupported algorithm '{name}'; supported algorithms: SM3, SM4"
+        f"unsupported algorithm '{name}'; supported algorithms: "
+        "SM3, HMAC-SM3, SM4, SM4-CTR-HMAC-SM3"
     )
 
 
@@ -217,9 +413,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         document = load_document(args.vector_file)
-        openssl = resolve_openssl(args.openssl)
-        return run_document(document, openssl)
-    except (RunnerError, sm4_runner.RunnerError) as error:
+        openssl = resolve_openssl(args.openssl) if args.backend != "gmssl" else ""
+        return run_document(document, openssl, backend=args.backend)
+    except CrossBackendMismatch as error:
+        print(f"[FAIL] backend mismatch: {error}", file=sys.stderr)
+        return EXIT_TEST_FAILURE
+    except (
+        RunnerError,
+        authenticated_sm4.FormatError,
+        authenticated_sm4.AuthenticationError,
+        authenticated_sm4_runner.RunnerError,
+        hmac_sm3_runner.RunnerError,
+        sm4_runner.RunnerError,
+    ) as error:
         print(f"Error: {error}", file=sys.stderr)
         return EXIT_INPUT_ERROR
 

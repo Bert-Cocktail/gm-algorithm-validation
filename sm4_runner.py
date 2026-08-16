@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run SM4 ECB/CBC JSON test vectors against the local OpenSSL executable."""
+"""Run SM4 ECB/CBC/CTR JSON test vectors with OpenSSL."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ EXIT_TEST_FAILURE = 1
 EXIT_INPUT_ERROR = 2
 SM4_BLOCK_HEX_LENGTH = 32
 SM4_KEY_HEX_LENGTH = 32
-SUPPORTED_MODES = {"ECB", "CBC"}
+SUPPORTED_MODES = {"ECB", "CBC", "CTR"}
 SUPPORTED_DIRECTIONS = {"encrypt", "decrypt"}
 HEX_RE = re.compile(r"^[0-9a-fA-F]*$")
 
@@ -30,7 +30,7 @@ class RunnerError(Exception):
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run SM4 ECB/CBC test vectors with OpenSSL."
+        description="Run SM4 ECB/CBC/CTR test vectors with OpenSSL."
     )
     parser.add_argument("vector_file", type=Path, help="path to an SM4 JSON file")
     parser.add_argument(
@@ -133,19 +133,24 @@ def extract_tests(document: dict[str, Any]) -> list[dict[str, Any]]:
             key = require_hex(
                 test.get("key"), "key", tc_id, exact_length=SM4_KEY_HEX_LENGTH
             )
+            block_aligned = mode in {"ECB", "CBC"}
             plaintext = require_hex(
-                test.get("pt"), "pt", tc_id, block_aligned=True
+                test.get("pt"), "pt", tc_id, block_aligned=block_aligned
             )
             ciphertext = require_hex(
-                test.get("ct"), "ct", tc_id, block_aligned=True
+                test.get("ct"), "ct", tc_id, block_aligned=block_aligned
             )
+            if mode == "CTR" and (not plaintext or not ciphertext):
+                raise RunnerError(
+                    f"tcId={tc_id}: 'pt' and 'ct' must not be empty"
+                )
             if len(plaintext) != len(ciphertext):
                 raise RunnerError(
                     f"tcId={tc_id}: 'pt' and 'ct' must have the same length"
                 )
 
             iv: str | None = None
-            if mode == "CBC":
+            if mode in {"CBC", "CTR"}:
                 iv = require_hex(
                     test.get("iv"), "iv", tc_id, exact_length=SM4_BLOCK_HEX_LENGTH
                 )
@@ -195,9 +200,9 @@ def sm4_crypt(
     command = [openssl, "enc", f"-sm4-{mode.lower()}", "-K", key, "-nopad"]
     if direction == "decrypt":
         command.append("-d")
-    if mode == "CBC":
+    if mode in {"CBC", "CTR"}:
         if iv is None:
-            raise RunnerError("CBC mode requires an IV")
+            raise RunnerError(f"{mode} mode requires an IV")
         command.extend(["-iv", iv])
 
     try:

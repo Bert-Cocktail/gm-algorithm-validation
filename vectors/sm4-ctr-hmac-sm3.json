@@ -1,0 +1,22 @@
+{
+  "algorithm": "SM4-CTR-HMAC-SM3",
+  "description": "Authenticated SM4-CTR regression vectors",
+  "testGroups": [
+    {
+      "tests": [
+        {
+          "tcId": 1,
+          "description": "Encrypt and authenticate abc with fixed experiment keys and IV",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "sm4Key": "0123456789abcdeffedcba9876543210",
+          "hmacKey": "00112233445566778899aabbccddeeff102132435465768798a9bacbdcedfe0f",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "616263",
+          "ct": "67faff",
+          "tag": "3c08e5f08855380ee0fbabd47aed4dbae5db19ebbe7b001a42fa8c69aaf97ade"
+        }
+      ]
+    }
+  ]
+}

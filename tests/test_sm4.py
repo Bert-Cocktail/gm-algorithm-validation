@@ -14,6 +14,8 @@ KEY = "0123456789abcdeffedcba9876543210"
 PLAINTEXT = "0123456789abcdeffedcba9876543210"
 CIPHERTEXT = "681edf34d206965e86b3e94f536e4246"
 IV = "000102030405060708090a0b0c0d0e0f"
+CTR_PLAINTEXT = PLAINTEXT + "01020304"
+CTR_CIPHERTEXT = "07bbd906b40da542d4514d1a97fccb7a6e050e4f"
 
 
 def vector_document(
@@ -85,6 +87,35 @@ class TestVectorValidation(unittest.TestCase):
         with self.assertRaisesRegex(sm4_runner.RunnerError, "'iv' must be a string"):
             sm4_runner.extract_tests(vector_document(mode="CBC"))
 
+    def test_ctr_without_iv_is_rejected(self) -> None:
+        with self.assertRaisesRegex(sm4_runner.RunnerError, "'iv' must be a string"):
+            sm4_runner.extract_tests(
+                vector_document(mode="CTR", pt=CTR_PLAINTEXT, ct=CTR_CIPHERTEXT)
+            )
+
+    def test_ctr_accepts_non_block_aligned_data(self) -> None:
+        tests = sm4_runner.extract_tests(
+            vector_document(
+                mode="CTR", pt=CTR_PLAINTEXT, ct=CTR_CIPHERTEXT, iv=IV
+            )
+        )
+
+        self.assertEqual(tests[0]["pt"], CTR_PLAINTEXT)
+
+    def test_ctr_empty_data_is_rejected(self) -> None:
+        with self.assertRaisesRegex(sm4_runner.RunnerError, "must not be empty"):
+            sm4_runner.extract_tests(
+                vector_document(mode="CTR", pt="", ct="", iv=IV)
+            )
+
+    def test_ctr_short_iv_is_rejected(self) -> None:
+        with self.assertRaisesRegex(sm4_runner.RunnerError, "32 hex characters"):
+            sm4_runner.extract_tests(
+                vector_document(
+                    mode="CTR", pt=CTR_PLAINTEXT, ct=CTR_CIPHERTEXT, iv="00" * 15
+                )
+            )
+
     def test_ecb_with_iv_is_rejected(self) -> None:
         with self.assertRaisesRegex(sm4_runner.RunnerError, "must not include an IV"):
             sm4_runner.extract_tests(vector_document(iv=IV))
@@ -131,6 +162,18 @@ class TestOpenSslSm4(unittest.TestCase):
         )
 
         self.assertNotEqual(ciphertext, plaintext)
+        self.assertEqual(recovered, plaintext)
+
+    def test_ctr_non_block_aligned_encrypt_decrypt(self) -> None:
+        plaintext = bytes.fromhex(CTR_PLAINTEXT)
+        ciphertext = sm4_runner.sm4_crypt(
+            self.openssl, "CTR", "encrypt", KEY, IV, plaintext
+        )
+        recovered = sm4_runner.sm4_crypt(
+            self.openssl, "CTR", "decrypt", KEY, IV, ciphertext
+        )
+
+        self.assertEqual(ciphertext.hex(), CTR_CIPHERTEXT)
         self.assertEqual(recovered, plaintext)
 
 
