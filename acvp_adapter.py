@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 from collections.abc import Callable, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,14 @@ ACV_VERSION = "1.0"
 PROJECT_ROOT = Path(__file__).resolve().parent
 REQUEST_SCHEMA = PROJECT_ROOT / "acvp" / "schemas" / "request-schema.json"
 RESPONSE_SCHEMA = PROJECT_ROOT / "acvp" / "schemas" / "response-schema.json"
+CAPABILITIES_SCHEMA = PROJECT_ROOT / "acvp" / "schemas" / "capabilities-schema.json"
+SUMMARY_SCHEMA = PROJECT_ROOT / "acvp" / "schemas" / "batch-summary-schema.json"
+
+TEST_TYPES = [
+    {"name": "AFT", "status": "supported"},
+    {"name": "MCT", "status": "recognized-not-implemented"},
+    {"name": "GDT", "status": "recognized-not-implemented"},
+]
 
 CAPABILITIES: dict[str, Any] = {
     "acvVersion": ACV_VERSION,
@@ -35,23 +44,41 @@ CAPABILITIES: dict[str, Any] = {
     "algorithms": [
         {
             "algorithm": "SM3",
+            "identifierMapping": {
+                "localAlgorithm": "SM3",
+                "standardIdentifier": "GB/T 32905-2016",
+                "acvpAlgorithm": None,
+                "acvpStatus": "no-identifier-asserted",
+            },
             "revision": "GB/T 32905-2016",
-            "testTypes": ["AFT"],
+            "testTypes": TEST_TYPES,
             "messageLength": {"min": 0, "max": 1048576, "increment": 8},
             "digestLength": 256,
         },
         {
             "algorithm": "HMAC-SM3",
+            "identifierMapping": {
+                "localAlgorithm": "HMAC-SM3",
+                "standardIdentifier": "local HMAC construction using SM3",
+                "acvpAlgorithm": None,
+                "acvpStatus": "no-identifier-asserted",
+            },
             "revision": "local-experiment",
-            "testTypes": ["AFT"],
+            "testTypes": TEST_TYPES,
             "keyLength": {"min": 8, "max": 4096, "increment": 8},
             "messageLength": {"min": 0, "max": 1048576, "increment": 8},
             "macLength": 256,
         },
         {
             "algorithm": "SM4",
+            "identifierMapping": {
+                "localAlgorithm": "SM4",
+                "standardIdentifier": "GB/T 32907-2016",
+                "acvpAlgorithm": None,
+                "acvpStatus": "no-identifier-asserted",
+            },
             "revision": "GB/T 32907-2016",
-            "testTypes": ["AFT"],
+            "testTypes": TEST_TYPES,
             "directions": ["encrypt", "decrypt"],
             "keyLength": 128,
             "modes": {
@@ -62,8 +89,14 @@ CAPABILITIES: dict[str, Any] = {
         },
         {
             "algorithm": authenticated_sm4.ALGORITHM,
+            "identifierMapping": {
+                "localAlgorithm": authenticated_sm4.ALGORITHM,
+                "standardIdentifier": "local Encrypt-then-MAC experiment",
+                "acvpAlgorithm": None,
+                "acvpStatus": "local-only",
+            },
             "revision": "local-experiment",
-            "testTypes": ["AFT"],
+            "testTypes": TEST_TYPES,
             "directions": ["encrypt"],
             "sm4KeyLength": 128,
             "hmacKeyLength": 256,
@@ -84,6 +117,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("request_file", type=Path, nargs="?")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--all", action="store_true", help="process all request files")
+    parser.add_argument("--request-dir", type=Path)
+    parser.add_argument("--response-dir", type=Path)
     parser.add_argument(
         "--capabilities",
         action="store_true",
@@ -142,26 +178,105 @@ def load_request(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
 
 def _validate_group_parameters(request: dict[str, Any]) -> None:
     algorithm = request["algorithm"].upper()
+    capability = next(
+        item for item in CAPABILITIES["algorithms"] if item["algorithm"] == algorithm
+    )
+    supported_types = {
+        item["name"] for item in capability["testTypes"] if item["status"] == "supported"
+    }
     for group in request["testGroups"]:
         tg_id = group["tgId"]
-        if group["testType"] != "AFT":
-            raise AdapterError(f"tgId={tg_id}: only testType 'AFT' is supported")
-        if algorithm == "HMAC-SM3":
+        test_type = group["testType"]
+        if test_type not in supported_types:
+            raise AdapterError(
+                f"tgId={tg_id}: testType '{test_type}' is recognized but not implemented; "
+                f"supported testTypes: {', '.join(sorted(supported_types))}"
+            )
+        if algorithm == "SM3":
+            for test in group["tests"]:
+                _validate_range(
+                    test["msgLen"], capability["messageLength"], "msgLen", test["tcId"]
+                )
+        elif algorithm == "HMAC-SM3":
+            _validate_range(group["keyLen"], capability["keyLength"], "keyLen", tg_id)
             for test in group["tests"]:
                 if len(test["key"]) * 4 != group["keyLen"]:
                     raise AdapterError(
                         f"tcId={test['tcId']}: key length does not match group keyLen"
                     )
-            if group["macLen"] != 256:
-                raise AdapterError(f"tgId={tg_id}: HMAC-SM3 macLen must be 256")
+                _validate_range(
+                    test["msgLen"], capability["messageLength"], "msgLen", test["tcId"]
+                )
+            if group["macLen"] != capability["macLength"]:
+                raise AdapterError(
+                    f"tgId={tg_id}: HMAC-SM3 macLen must be {capability['macLength']}"
+                )
         elif algorithm == "SM4":
-            if group["keyLen"] != 128:
-                raise AdapterError(f"tgId={tg_id}: SM4 keyLen must be 128")
+            mode = group["mode"]
+            direction = group["direction"]
+            if group["keyLen"] != capability["keyLength"]:
+                raise AdapterError(
+                    f"tgId={tg_id}: SM4 keyLen must be {capability['keyLength']}"
+                )
+            if direction not in capability["directions"] or mode not in capability["modes"]:
+                raise AdapterError(f"tgId={tg_id}: request exceeds SM4 capabilities")
+            mode_capability = capability["modes"][mode]
+            input_field = "pt" if direction == "encrypt" else "ct"
+            for test in group["tests"]:
+                if len(test["key"]) * 4 != capability["keyLength"]:
+                    raise AdapterError(
+                        f"tcId={test['tcId']}: key length exceeds declared capability"
+                    )
+                payload_length = len(test[input_field]) * 4
+                _validate_range(
+                    payload_length,
+                    mode_capability["payloadLength"],
+                    "payload length",
+                    test["tcId"],
+                )
+                if "ivLength" in mode_capability and len(test["iv"]) * 4 != mode_capability["ivLength"]:
+                    raise AdapterError(
+                        f"tcId={test['tcId']}: IV length exceeds declared capability"
+                    )
         elif algorithm == authenticated_sm4.ALGORITHM:
-            if group["direction"] != "encrypt":
+            if group["direction"] not in capability["directions"]:
                 raise AdapterError(
                     f"tgId={tg_id}: authenticated experiment supports encrypt only"
                 )
+            expected = {
+                "sm4KeyLen": capability["sm4KeyLength"],
+                "hmacKeyLen": capability["hmacKeyLength"],
+                "tagLen": capability["tagLength"],
+            }
+            for field, value in expected.items():
+                if group[field] != value:
+                    raise AdapterError(f"tgId={tg_id}: {field} must be {value}")
+            for test in group["tests"]:
+                actual_lengths = {
+                    "sm4KeyLength": len(test["sm4Key"]) * 4,
+                    "hmacKeyLength": len(test["hmacKey"]) * 4,
+                    "ivLength": len(test["iv"]) * 4,
+                }
+                for field, actual in actual_lengths.items():
+                    if actual != capability[field]:
+                        raise AdapterError(
+                            f"tcId={test['tcId']}: {field} exceeds declared capability"
+                        )
+
+
+def _validate_range(value: int, limits: dict[str, int], field: str, identifier: int) -> None:
+    minimum = limits["min"]
+    maximum = limits.get("max")
+    increment = limits["increment"]
+    if value < minimum or (maximum is not None and value > maximum):
+        upper = str(maximum) if maximum is not None else "unbounded"
+        raise AdapterError(
+            f"id={identifier}: {field}={value} is outside capability range {minimum}..{upper}"
+        )
+    if (value - minimum) % increment != 0:
+        raise AdapterError(
+            f"id={identifier}: {field}={value} does not match increment {increment}"
+        )
 
 
 def _validate_group_ids(request: dict[str, Any]) -> None:
@@ -400,12 +515,10 @@ def process_request(
     return envelope, mismatches
 
 
-def write_response(path: Path, request_path: Path, response: list[dict[str, Any]]) -> None:
-    if path.resolve() == request_path.resolve():
-        raise AdapterError("output path must not overwrite the request file")
+def _atomic_write_json(path: Path, value: Any) -> None:
     if not path.parent.exists() or not path.parent.is_dir():
         raise AdapterError(f"output directory not found: {path.parent}")
-    encoded = (json.dumps(response, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    encoded = (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
     temporary: Path | None = None
     try:
         descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -426,16 +539,148 @@ def write_response(path: Path, request_path: Path, response: list[dict[str, Any]
                 pass
 
 
+def write_response(path: Path, request_path: Path, response: list[dict[str, Any]]) -> None:
+    if path.resolve() == request_path.resolve():
+        raise AdapterError("output path must not overwrite the request file")
+    _atomic_write_json(path, response)
+
+
+PROCESS_ERRORS = (
+    AdapterError,
+    runner.RunnerError,
+    sm4_runner.RunnerError,
+    hmac_sm3_runner.RunnerError,
+    authenticated_sm4_runner.RunnerError,
+    authenticated_sm4.FormatError,
+)
+
+
+def _count_tests(request: dict[str, Any]) -> int:
+    return sum(len(group["tests"]) for group in request["testGroups"])
+
+
+def _batch_response_name(request_path: Path) -> str:
+    stem = request_path.stem
+    response_stem = stem[:-8] + "-response" if stem.endswith("-request") else stem + "-response"
+    return response_stem + ".json"
+
+
+def run_batch(args: argparse.Namespace) -> int:
+    if args.request_dir is None or args.response_dir is None:
+        raise AdapterError("--all requires --request-dir and --response-dir")
+    request_dir = args.request_dir.resolve()
+    response_dir = args.response_dir.resolve()
+    if not request_dir.is_dir():
+        raise AdapterError(f"request directory not found: {args.request_dir}")
+    if request_dir == response_dir:
+        raise AdapterError("request and response directories must be different")
+    response_dir.mkdir(parents=True, exist_ok=True)
+    request_paths = sorted(request_dir.glob("*-request.json"), key=lambda path: path.name)
+    if not request_paths:
+        raise AdapterError(f"no *-request.json files found in: {args.request_dir}")
+
+    response_names = [_batch_response_name(path) for path in request_paths]
+    if len(response_names) != len(set(response_names)):
+        raise AdapterError("request filenames produce duplicate response filenames")
+
+    openssl = runner.resolve_openssl(args.openssl) if args.backend != "gmssl" else ""
+    files: list[dict[str, Any]] = []
+    seen_vs_ids: set[int] = set()
+    passed_files = failed_files = error_files = total_tests = mismatch_count = 0
+
+    for request_path, response_name in zip(request_paths, response_names):
+        response_path = response_dir / response_name
+        item: dict[str, Any] = {
+            "requestFile": request_path.name,
+            "responseFile": response_name,
+        }
+        print(f"\n=== {request_path.name} ===")
+        try:
+            version, request = load_request(request_path)
+            item.update(
+                {
+                    "vsId": request["vsId"],
+                    "algorithm": request["algorithm"],
+                    "tests": _count_tests(request),
+                }
+            )
+            if request["vsId"] in seen_vs_ids:
+                raise AdapterError(f"duplicate vsId across request files: {request['vsId']}")
+            seen_vs_ids.add(request["vsId"])
+            response, mismatches = process_request(version, request, openssl, args.backend)
+            write_response(response_path, request_path, response)
+            total_tests += item["tests"]
+            mismatch_count += len(mismatches)
+            if mismatches:
+                item.update({"status": "failed", "exitCode": EXIT_TEST_FAILURE, "mismatches": len(mismatches)})
+                failed_files += 1
+            else:
+                item.update({"status": "passed", "exitCode": EXIT_SUCCESS, "mismatches": 0})
+                passed_files += 1
+        except PROCESS_ERRORS as error:
+            print(f"Error: {error}", file=sys.stderr)
+            item.update(
+                {
+                    "status": "error",
+                    "exitCode": EXIT_INPUT_ERROR,
+                    "error": str(error),
+                }
+            )
+            error_files += 1
+        files.append(item)
+
+    exit_code = (
+        EXIT_INPUT_ERROR
+        if error_files
+        else EXIT_TEST_FAILURE if failed_files else EXIT_SUCCESS
+    )
+    status = "error" if error_files else "failed" if failed_files else "passed"
+    summary = {
+        "schemaVersion": 1,
+        "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "backend": args.backend,
+        "status": status,
+        "exitCode": exit_code,
+        "summary": {
+            "files": len(files),
+            "passedFiles": passed_files,
+            "failedFiles": failed_files,
+            "errorFiles": error_files,
+            "tests": total_tests,
+            "backendMismatches": mismatch_count,
+        },
+        "files": files,
+    }
+    validate_schema(summary, SUMMARY_SCHEMA, "batch summary")
+    _atomic_write_json(response_dir / "summary.json", summary)
+    print(
+        f"\nBatch total: Files={len(files)}, Passed={passed_files}, "
+        f"Failed={failed_files}, Errors={error_files}, Tests={total_tests}, "
+        f"Mismatches={mismatch_count}"
+    )
+    return exit_code
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         if args.capabilities:
-            if args.request_file is not None or args.output is not None:
+            if any(
+                value is not None
+                for value in (args.request_file, args.output, args.request_dir, args.response_dir)
+            ) or args.all:
                 raise AdapterError(
-                    "--capabilities cannot be combined with a request file or --output"
+                    "--capabilities cannot be combined with request or batch options"
                 )
+            validate_schema(CAPABILITIES, CAPABILITIES_SCHEMA, "capabilities")
             print(json.dumps(CAPABILITIES, indent=2, ensure_ascii=False))
             return EXIT_SUCCESS
+        if args.all:
+            if args.request_file is not None or args.output is not None:
+                raise AdapterError("--all cannot be combined with request_file or --output")
+            return run_batch(args)
+        if args.request_dir is not None or args.response_dir is not None:
+            raise AdapterError("--request-dir and --response-dir require --all")
         if args.request_file is None or args.output is None:
             raise AdapterError("request_file and --output are required")
         version, request = load_request(args.request_file)
@@ -443,14 +688,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         response, mismatches = process_request(version, request, openssl, args.backend)
         write_response(args.output, args.request_file, response)
         return EXIT_TEST_FAILURE if mismatches else EXIT_SUCCESS
-    except (
-        AdapterError,
-        runner.RunnerError,
-        sm4_runner.RunnerError,
-        hmac_sm3_runner.RunnerError,
-        authenticated_sm4_runner.RunnerError,
-        authenticated_sm4.FormatError,
-    ) as error:
+    except PROCESS_ERRORS as error:
         print(f"Error: {error}", file=sys.stderr)
         return EXIT_INPUT_ERROR
 

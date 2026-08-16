@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
-results/*.json
+results/
 build/
 auth-key.json
 *.gmkey.json

@@ -226,6 +226,61 @@ class TestAcvpAdapter(unittest.TestCase):
             [item["algorithm"] for item in capabilities["algorithms"]],
             ["SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"],
         )
+        for algorithm in capabilities["algorithms"]:
+            mapping = algorithm["identifierMapping"]
+            self.assertEqual(mapping["localAlgorithm"], algorithm["algorithm"])
+            self.assertIsNone(mapping["acvpAlgorithm"])
+            self.assertIn(
+                {item["name"]: item["status"] for item in algorithm["testTypes"]}["AFT"],
+                {"supported"},
+            )
+
+    def test_recognized_mct_is_rejected_as_not_implemented(self) -> None:
+        request = {
+            "vsId": 9,
+            "algorithm": "SM3",
+            "testGroups": [
+                {
+                    "tgId": 1,
+                    "testType": "MCT",
+                    "tests": [{"tcId": 1, "msg": "", "msgLen": 0}],
+                }
+            ],
+        }
+
+        exit_code, response = self.run_request(request)
+
+        self.assertEqual(exit_code, acvp_adapter.EXIT_INPUT_ERROR)
+        self.assertEqual(response, [])
+
+    def test_request_is_checked_against_runtime_capabilities(self) -> None:
+        request = {
+            "vsId": 10,
+            "algorithm": "SM3",
+            "testGroups": [
+                {
+                    "tgId": 1,
+                    "testType": "AFT",
+                    "tests": [{"tcId": 1, "msg": "616263", "msgLen": 24}],
+                }
+            ],
+        }
+        sm3_capability = acvp_adapter.CAPABILITIES["algorithms"][0]
+
+        with patch.dict(sm3_capability["messageLength"], {"max": 8}):
+            exit_code, response = self.run_request(request)
+
+        self.assertEqual(exit_code, acvp_adapter.EXIT_INPUT_ERROR)
+        self.assertEqual(response, [])
+
+    def test_invalid_capabilities_fail_schema_validation(self) -> None:
+        output = io.StringIO()
+        with patch.dict(acvp_adapter.CAPABILITIES, {"localFormat": False}):
+            with redirect_stdout(output), redirect_stderr(io.StringIO()):
+                exit_code = acvp_adapter.main(["--capabilities"])
+
+        self.assertEqual(exit_code, acvp_adapter.EXIT_INPUT_ERROR)
+        self.assertEqual(output.getvalue(), "")
 
     def test_schema_rejects_missing_test_type(self) -> None:
         request = {

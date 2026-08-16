@@ -60,6 +60,8 @@
 - 支持 `openssl`、`gmssl`、`cross` 后端；交叉不一致写入本地扩展 `localDiagnostics`
 - 请求和生成的响应都会通过仓库内 JSON Schema 校验
 - `--capabilities` 输出算法、模式、方向及长度约束等机器可读能力
+- `--all` 可批量处理请求目录，逐文件生成响应和 ACVP 汇总报告
+- 请求会与能力描述交叉检查；MCT/GDT 可识别但尚不执行
 
 两个执行器都会输出每个测试用例的 PASS/FAIL，并区分测试失败与输入、环境错误。
 
@@ -86,6 +88,8 @@ gm-algorithm-validation/
 │   └── sm4.json
 ├── acvp/
 │   ├── schemas/
+│   │   ├── capabilities-schema.json
+│   │   ├── batch-summary-schema.json
 │   │   ├── request-schema.json
 │   │   └── response-schema.json
 │   ├── requests/
@@ -98,6 +102,7 @@ gm-algorithm-validation/
 │       └── sm4-response.json
 ├── tests/
 │   ├── test_acvp_adapter.py
+│   ├── test_acvp_batch.py
 │   ├── test_sm3.py
 │   ├── test_hmac_sm3.py
 │   ├── test_authenticated_sm4.py
@@ -287,6 +292,16 @@ python acvp_adapter.py --capabilities
 
 普通请求会在执行前通过 `acvp/schemas/request-schema.json` 校验，生成的响应会在写入前通过 `response-schema.json` 校验，验证器使用 `jsonschema 4.25.1` 的 Draft 2020-12 实现。组级字段包括 `testType`，HMAC-SM3 还包括 `keyLen`、`macLen`，SM4 包括 `direction`、`keyLen` 和 `mode`；`msgLen` 保持为测试用例级字段，因为同组测试可以有不同消息长度。
 
+批量处理全部 ACVP 风格请求：
+
+```powershell
+python acvp_adapter.py --all --request-dir acvp\requests --response-dir results\acvp --backend cross
+```
+
+程序只发现 `*-request.json`，按文件名排序处理。单个请求错误不会阻止后续文件；响应目录会自动创建，并生成 `summary.json`，记录文件数、测试数、错误数和后端不一致数。跨文件 `vsId` 必须唯一。
+
+能力描述不是展示信息：请求的测试类型、消息和密钥长度、SM4 模式、方向、IV 与负载长度都会与其校验。`AFT` 当前可执行；`MCT`、`GDT` 仅被 Schema 识别，并返回“未实现”，因为项目尚未实现对应规范循环。每种算法的 `identifierMapping` 记录本地名称和标准来源；当前未断言任何正式 NIST ACVP 注册标识，所以 `acvpAlgorithm` 为 `null`。
+
 批量运行全部向量并生成报告：
 
 ```powershell
@@ -324,7 +339,7 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 128 项测试：
+当前共有 136 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -339,12 +354,13 @@ python -m unittest discover -s tests -v
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
 - 5 项批量向量执行与汇总测试
-- 9 项 ACVP 风格请求、响应、Schema 和能力描述测试
+- 12 项 ACVP 风格请求、响应、Schema、能力约束和标识映射测试
+- 5 项 ACVP 请求批量处理与汇总测试
 
 本次实测结果：
 
 ```text
-Ran 128 tests in ...
+Ran 136 tests in ...
 
 OK
 ```

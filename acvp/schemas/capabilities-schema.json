@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/gm-validation/acvp-capabilities.schema.json",
+  "title": "Local ACVP-style capabilities",
+  "type": "object",
+  "properties": {
+    "acvVersion": {"const": "1.0"},
+    "localFormat": {"const": true},
+    "algorithms": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/algorithm"}
+    }
+  },
+  "required": ["acvVersion", "localFormat", "algorithms"],
+  "additionalProperties": false,
+  "$defs": {
+    "range": {
+      "type": "object",
+      "properties": {
+        "min": {"type": "integer", "minimum": 0},
+        "max": {"type": "integer", "minimum": 0},
+        "increment": {"type": "integer", "minimum": 1}
+      },
+      "required": ["min", "increment"],
+      "additionalProperties": false
+    },
+    "mapping": {
+      "type": "object",
+      "properties": {
+        "localAlgorithm": {"type": "string", "minLength": 1},
+        "standardIdentifier": {"type": "string", "minLength": 1},
+        "acvpAlgorithm": {"type": ["string", "null"]},
+        "acvpStatus": {"enum": ["no-identifier-asserted", "local-only", "mapped"]}
+      },
+      "required": ["localAlgorithm", "standardIdentifier", "acvpAlgorithm", "acvpStatus"],
+      "additionalProperties": false
+    },
+    "testType": {
+      "type": "object",
+      "properties": {
+        "name": {"enum": ["AFT", "MCT", "GDT"]},
+        "status": {"enum": ["supported", "recognized-not-implemented"]}
+      },
+      "required": ["name", "status"],
+      "additionalProperties": false
+    },
+    "algorithm": {
+      "type": "object",
+      "properties": {
+        "algorithm": {"enum": ["SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"]},
+        "identifierMapping": {"$ref": "#/$defs/mapping"},
+        "revision": {"type": "string", "minLength": 1},
+        "testTypes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/testType"}},
+        "messageLength": {"$ref": "#/$defs/range"},
+        "digestLength": {"type": "integer", "minimum": 1},
+        "keyLength": {"oneOf": [{"type": "integer", "minimum": 1}, {"$ref": "#/$defs/range"}]},
+        "macLength": {"type": "integer", "minimum": 1},
+        "directions": {"type": "array", "items": {"enum": ["encrypt", "decrypt"]}, "minItems": 1},
+        "modes": {"type": "object"},
+        "sm4KeyLength": {"type": "integer", "minimum": 1},
+        "hmacKeyLength": {"type": "integer", "minimum": 1},
+        "ivLength": {"type": "integer", "minimum": 1},
+        "tagLength": {"type": "integer", "minimum": 1}
+      },
+      "required": ["algorithm", "identifierMapping", "revision", "testTypes"],
+      "additionalProperties": false
+    }
+  }
+}

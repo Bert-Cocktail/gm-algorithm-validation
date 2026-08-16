@@ -50,7 +50,7 @@
       "type": "object",
       "properties": {
         "tgId": {"$ref": "#/$defs/positiveId"},
-        "testType": {"const": "AFT"},
+        "testType": {"enum": ["AFT", "MCT", "GDT"]},
         "tests": {
           "type": "array", "minItems": 1,
           "items": {
@@ -72,7 +72,7 @@
       "type": "object",
       "properties": {
         "tgId": {"$ref": "#/$defs/positiveId"},
-        "testType": {"const": "AFT"},
+        "testType": {"enum": ["AFT", "MCT", "GDT"]},
         "keyLen": {"type": "integer", "minimum": 8, "maximum": 4096, "multipleOf": 8},
         "macLen": {"const": 256},
         "tests": {
@@ -97,7 +97,7 @@
       "type": "object",
       "properties": {
         "tgId": {"$ref": "#/$defs/positiveId"},
-        "testType": {"const": "AFT"},
+        "testType": {"enum": ["AFT", "MCT", "GDT"]},
         "direction": {"enum": ["encrypt", "decrypt"]},
         "keyLen": {"const": 128},
         "mode": {"enum": ["ECB", "CBC", "CTR"]},
@@ -135,7 +135,7 @@
       "type": "object",
       "properties": {
         "tgId": {"$ref": "#/$defs/positiveId"},
-        "testType": {"const": "AFT"},
+        "testType": {"enum": ["AFT", "MCT", "GDT"]},
         "direction": {"const": "encrypt"},
         "sm4KeyLen": {"const": 128},
         "hmacKeyLen": {"const": 256},

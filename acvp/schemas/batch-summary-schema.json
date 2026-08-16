@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/gm-validation/acvp-batch-summary.schema.json",
+  "title": "Local ACVP-style batch summary",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "generatedAt": {"type": "string", "format": "date-time"},
+    "backend": {"enum": ["openssl", "gmssl", "cross"]},
+    "status": {"enum": ["passed", "failed", "error"]},
+    "exitCode": {"enum": [0, 1, 2]},
+    "summary": {
+      "type": "object",
+      "properties": {
+        "files": {"type": "integer", "minimum": 1},
+        "passedFiles": {"type": "integer", "minimum": 0},
+        "failedFiles": {"type": "integer", "minimum": 0},
+        "errorFiles": {"type": "integer", "minimum": 0},
+        "tests": {"type": "integer", "minimum": 0},
+        "backendMismatches": {"type": "integer", "minimum": 0}
+      },
+      "required": ["files", "passedFiles", "failedFiles", "errorFiles", "tests", "backendMismatches"],
+      "additionalProperties": false
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "requestFile": {"type": "string", "minLength": 1},
+          "responseFile": {"type": "string", "minLength": 1},
+          "vsId": {"type": "integer", "minimum": 0},
+          "algorithm": {"type": "string"},
+          "tests": {"type": "integer", "minimum": 0},
+          "status": {"enum": ["passed", "failed", "error"]},
+          "exitCode": {"enum": [0, 1, 2]},
+          "mismatches": {"type": "integer", "minimum": 0},
+          "error": {"type": "string", "minLength": 1}
+        },
+        "required": ["requestFile", "responseFile", "status", "exitCode"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schemaVersion", "generatedAt", "backend", "status", "exitCode", "summary", "files"],
+  "additionalProperties": false
+}

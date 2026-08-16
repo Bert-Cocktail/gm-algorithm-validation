@@ -83,11 +83,11 @@ python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-respo
 
 SM4 的 ECB 组不需要 `iv`；CBC 和 CTR 需要 128 bit IV。SM4-CTR-HMAC-SM3 是本项目的实验组合，不是这里声称的 ACVP 标准算法标识。
 
-组级 `testType` 当前只支持 `AFT`。HMAC-SM3 组还声明 `keyLen` 与 `macLen`，SM4 组声明 `direction`、`keyLen` 与 `mode`。`msgLen` 位于具体测试用例中，因为同一组可以包含不同长度的消息。
+组级 `testType` 可写为 `AFT`、`MCT` 或 `GDT`。当前只有 `AFT` 具备正确执行逻辑；`MCT` 与 `GDT` 会被识别并明确拒绝为“尚未实现”，不会套用普通 AFT 计算。HMAC-SM3 组还声明 `keyLen` 与 `macLen`，SM4 组声明 `direction`、`keyLen` 与 `mode`。`msgLen` 位于具体测试用例中，因为同一组可以包含不同长度的消息。
 
 ## JSON Schema 校验
 
-请求执行前使用 `acvp/schemas/request-schema.json` 校验，响应写入前使用 `acvp/schemas/response-schema.json` 校验。Schema 使用 Draft 2020-12 声明，并由开发依赖 `jsonschema 4.25.1` 的完整 Draft 2020-12 验证器执行。
+请求执行前使用 `acvp/schemas/request-schema.json` 校验，响应写入前使用 `acvp/schemas/response-schema.json` 校验，能力描述和批量汇总分别使用 `capabilities-schema.json`、`batch-summary-schema.json`。四份 Schema 使用 Draft 2020-12 声明，并由开发依赖 `jsonschema 4.25.1` 的完整 Draft 2020-12 验证器执行。
 
 ## 能力描述
 
@@ -97,7 +97,47 @@ SM4 的 ECB 组不需要 `iv`；CBC 和 CTR 需要 128 bit IV。SM4-CTR-HMAC-SM3
 python acvp_adapter.py --capabilities
 ```
 
-输出包含四种算法的 `revision`、`testTypes`、消息或密钥长度限制，以及 SM4 的模式、方向、IV 和负载长度约束。`localFormat: true` 明确表示这是本地能力描述，不是发送到 ACVTS 的正式注册对象。
+输出包含四种算法的 `revision`、`testTypes`、消息或密钥长度限制，以及 SM4 的模式、方向、IV 和负载长度约束。处理请求时会实际使用这些范围，额外检查消息长度、HMAC 密钥长度、SM4 模式与负载，以及认证组合参数。
+
+每项算法还包含 `identifierMapping`：
+
+- `localAlgorithm`：仓库内部路由名称。
+- `standardIdentifier`：算法或实验构造的来源说明。
+- `acvpAlgorithm`：正式 ACVP 算法标识；当前均为 `null`。
+- `acvpStatus`：未断言标识或仅限本地实验的原因。
+
+这里不把 `SM3`、`SM4` 等本地字符串冒充为 NIST ACVP 注册标识。`localFormat: true` 明确表示这不是发送到 ACVTS 的正式注册对象。
+
+## 批量请求处理
+
+```powershell
+python acvp_adapter.py --all `
+  --request-dir acvp\requests `
+  --response-dir results\acvp `
+  --backend cross
+```
+
+批量模式只读取 `*-request.json`，自动创建响应目录，按文件名顺序继续处理全部请求。每个成功请求产生对应的 `*-response.json`，目录中同时生成 `summary.json`：
+
+```json
+{
+  "schemaVersion": 1,
+  "backend": "cross",
+  "status": "passed",
+  "exitCode": 0,
+  "summary": {
+    "files": 3,
+    "passedFiles": 3,
+    "failedFiles": 0,
+    "errorFiles": 0,
+    "tests": 5,
+    "backendMismatches": 0
+  },
+  "files": []
+}
+```
+
+跨请求文件的 `vsId` 必须唯一。单个文件出现 Schema、参数或重复 ID 错误时，其他文件仍继续；总退出码优先级为错误 `2`、后端不一致 `1`、全部成功 `0`。请求目录和响应目录不能相同。
 
 ## 交叉后端诊断
 
@@ -132,8 +172,11 @@ python acvp_adapter.py --capabilities
 
 ## 测试覆盖
 
-`tests/test_acvp_adapter.py` 包含 9 项测试，覆盖 SM3、HMAC-SM3、SM4 加解密、认证组合、重复 ID 与覆盖保护、多个交叉后端不一致的完整收集、能力描述、Schema 必填字段及组级长度一致性。
+`tests/test_acvp_adapter.py` 包含 12 项测试，覆盖 SM3、HMAC-SM3、SM4 加解密、认证组合、重复 ID 与覆盖保护、多个交叉后端不一致的完整收集、能力描述与 Schema、MCT 拒绝、能力范围及标识映射。
+
+`tests/test_acvp_batch.py` 包含 5 项测试，覆盖三类样例批量成功、错误后继续、后端不一致汇总、跨文件重复 `vsId` 和目录保护。
 
 ```powershell
 python -m unittest tests.test_acvp_adapter -v
+python -m unittest tests.test_acvp_batch -v
 ```

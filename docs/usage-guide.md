@@ -320,6 +320,28 @@ python runner.py vectors\hmac-sm3.json
 
 该文件当前包含 4 个回归向量，覆盖 1、16、64、65 byte HMAC 密钥，并已使用 Python gmssl 3.2.2 交叉验证；它们不标记为官方标准向量。
 
+### 5.5 ACVP 风格请求与批量响应
+
+单文件请求：
+
+```powershell
+python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-response.json --backend cross
+```
+
+批量处理：
+
+```powershell
+python acvp_adapter.py --all --request-dir acvp\requests --response-dir results\acvp --backend cross
+```
+
+批量模式生成逐文件响应和 `results\acvp\summary.json`，单个请求错误后仍继续。查看机器可读能力：
+
+```powershell
+python acvp_adapter.py --capabilities
+```
+
+请求会同时经过 JSON Schema、现有算法参数校验和能力范围校验。当前执行 `AFT`；`MCT`、`GDT` 仅识别但尚未实现。能力中的 `identifierMapping.acvpAlgorithm` 当前为 `null`，表示项目没有断言正式 NIST ACVP 注册标识。详细格式见 `docs/acvp-format-experiment.md`。
+
 ## 6. 运行 SM3 验证
 
 执行：
@@ -592,7 +614,7 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 128 项测试：
+当前共有 136 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -607,12 +629,13 @@ python -m unittest discover -s tests -v
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
 - 5 项批量向量执行与汇总测试
-- 9 项 ACVP 风格请求、响应、Schema 和能力描述测试
+- 12 项 ACVP 风格请求、响应、Schema、能力约束和标识映射测试
+- 5 项 ACVP 请求批量处理与汇总测试
 
 当前预期结果：
 
 ```text
-Ran 128 tests in ...
+Ran 136 tests in ...
 
 OK
 ```
