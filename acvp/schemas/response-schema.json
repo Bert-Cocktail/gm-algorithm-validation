@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/gm-validation/acvp-response.schema.json",
+  "title": "Local ACVP-style response envelope",
+  "type": "array",
+  "minItems": 2,
+  "maxItems": 2,
+  "prefixItems": [
+    {
+      "type": "object",
+      "properties": {"acvVersion": {"const": "1.0"}},
+      "required": ["acvVersion"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "vsId": {"type": "integer", "minimum": 0},
+        "algorithm": {"enum": ["SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"]},
+        "testGroups": {"type": "array", "minItems": 1},
+        "localDiagnostics": {"type": "object"}
+      },
+      "required": ["vsId", "algorithm", "testGroups"],
+      "additionalProperties": false,
+      "allOf": [
+        {"if": {"properties": {"algorithm": {"const": "SM3"}}}, "then": {"properties": {"testGroups": {"items": {"$ref": "#/$defs/mdGroup"}}}}},
+        {"if": {"properties": {"algorithm": {"const": "HMAC-SM3"}}}, "then": {"properties": {"testGroups": {"items": {"$ref": "#/$defs/macGroup"}}}}},
+        {"if": {"properties": {"algorithm": {"const": "SM4"}}}, "then": {"properties": {"testGroups": {"items": {"$ref": "#/$defs/cipherGroup"}}}}},
+        {"if": {"properties": {"algorithm": {"const": "SM4-CTR-HMAC-SM3"}}}, "then": {"properties": {"testGroups": {"items": {"$ref": "#/$defs/authGroup"}}}}}
+      ]
+    }
+  ],
+  "$defs": {
+    "resultGroup": {
+      "type": "object",
+      "properties": {
+        "tgId": {"type": "integer", "minimum": 0},
+        "tests": {"type": "array", "minItems": 1}
+      },
+      "required": ["tgId", "tests"],
+      "additionalProperties": false
+    },
+    "mdGroup": {
+      "allOf": [
+        {"$ref": "#/$defs/resultGroup"},
+        {"properties": {"tests": {"items": {"type": "object", "properties": {"tcId": {"type": "integer"}, "md": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, "required": ["tcId", "md"], "additionalProperties": false}}}}
+      ]
+    },
+    "macGroup": {
+      "allOf": [
+        {"$ref": "#/$defs/resultGroup"},
+        {"properties": {"tests": {"items": {"type": "object", "properties": {"tcId": {"type": "integer"}, "mac": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, "required": ["tcId", "mac"], "additionalProperties": false}}}}
+      ]
+    },
+    "cipherGroup": {
+      "allOf": [
+        {"$ref": "#/$defs/resultGroup"},
+        {"properties": {"tests": {"items": {"type": "object", "properties": {"tcId": {"type": "integer"}, "pt": {"type": "string", "pattern": "^(?:[0-9a-f]{2})+$"}, "ct": {"type": "string", "pattern": "^(?:[0-9a-f]{2})+$"}}, "required": ["tcId"], "oneOf": [{"required": ["pt"]}, {"required": ["ct"]}], "additionalProperties": false}}}}
+      ]
+    },
+    "authGroup": {
+      "allOf": [
+        {"$ref": "#/$defs/resultGroup"},
+        {"properties": {"tests": {"items": {"type": "object", "properties": {"tcId": {"type": "integer"}, "ct": {"type": "string", "pattern": "^(?:[0-9a-f]{2})*$"}, "tag": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, "required": ["tcId", "ct", "tag"], "additionalProperties": false}}}}
+      ]
+    }
+  }
+}

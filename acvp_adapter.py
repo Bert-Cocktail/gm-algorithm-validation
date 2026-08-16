@@ -12,6 +12,8 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+import jsonschema
+
 import authenticated_sm4
 import authenticated_sm4_runner
 import hmac_sm3_runner
@@ -23,6 +25,53 @@ EXIT_SUCCESS = 0
 EXIT_TEST_FAILURE = 1
 EXIT_INPUT_ERROR = 2
 ACV_VERSION = "1.0"
+PROJECT_ROOT = Path(__file__).resolve().parent
+REQUEST_SCHEMA = PROJECT_ROOT / "acvp" / "schemas" / "request-schema.json"
+RESPONSE_SCHEMA = PROJECT_ROOT / "acvp" / "schemas" / "response-schema.json"
+
+CAPABILITIES: dict[str, Any] = {
+    "acvVersion": ACV_VERSION,
+    "localFormat": True,
+    "algorithms": [
+        {
+            "algorithm": "SM3",
+            "revision": "GB/T 32905-2016",
+            "testTypes": ["AFT"],
+            "messageLength": {"min": 0, "max": 1048576, "increment": 8},
+            "digestLength": 256,
+        },
+        {
+            "algorithm": "HMAC-SM3",
+            "revision": "local-experiment",
+            "testTypes": ["AFT"],
+            "keyLength": {"min": 8, "max": 4096, "increment": 8},
+            "messageLength": {"min": 0, "max": 1048576, "increment": 8},
+            "macLength": 256,
+        },
+        {
+            "algorithm": "SM4",
+            "revision": "GB/T 32907-2016",
+            "testTypes": ["AFT"],
+            "directions": ["encrypt", "decrypt"],
+            "keyLength": 128,
+            "modes": {
+                "ECB": {"payloadLength": {"min": 128, "increment": 128}},
+                "CBC": {"ivLength": 128, "payloadLength": {"min": 128, "increment": 128}},
+                "CTR": {"ivLength": 128, "payloadLength": {"min": 8, "increment": 8}},
+            },
+        },
+        {
+            "algorithm": authenticated_sm4.ALGORITHM,
+            "revision": "local-experiment",
+            "testTypes": ["AFT"],
+            "directions": ["encrypt"],
+            "sm4KeyLength": 128,
+            "hmacKeyLength": 256,
+            "ivLength": 128,
+            "tagLength": 256,
+        },
+    ],
+}
 
 
 class AdapterError(Exception):
@@ -33,8 +82,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Process a local ACVP-like request and write its response."
     )
-    parser.add_argument("request_file", type=Path)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("request_file", type=Path, nargs="?")
+    parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--capabilities",
+        action="store_true",
+        help="print the local implementation capabilities as JSON",
+    )
     parser.add_argument(
         "--backend",
         choices=("openssl", "gmssl", "cross"),
@@ -42,6 +96,30 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--openssl", default="openssl")
     return parser.parse_args(argv)
+
+
+def _load_schema(path: Path) -> dict[str, Any]:
+    try:
+        with path.open("r", encoding="utf-8") as schema_file:
+            schema = json.load(schema_file)
+    except (OSError, json.JSONDecodeError) as error:
+        raise AdapterError(f"cannot load JSON Schema {path.name}: {error}") from error
+    if not isinstance(schema, dict):
+        raise AdapterError(f"JSON Schema {path.name} must contain an object")
+    return schema
+
+
+def validate_schema(instance: Any, schema_path: Path, label: str) -> None:
+    try:
+        validator = jsonschema.Draft202012Validator(_load_schema(schema_path))
+        error = next(iter(validator.iter_errors(instance)), None)
+    except jsonschema.SchemaError as schema_error:
+        raise AdapterError(
+            f"invalid {label} JSON Schema: {schema_error.message}"
+        ) from schema_error
+    if error is not None:
+        location = "/".join(str(part) for part in error.absolute_path) or "<root>"
+        raise AdapterError(f"{label} schema error at {location}: {error.message}")
 
 
 def load_request(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -57,19 +135,33 @@ def load_request(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             f"invalid JSON at line {error.lineno}, column {error.colno}: {error.msg}"
         ) from error
 
-    if not isinstance(envelope, list) or len(envelope) != 2:
-        raise AdapterError("request must be a two-object ACVP-style array")
+    validate_schema(envelope, REQUEST_SCHEMA, "request")
     version, request = envelope
-    if not isinstance(version, dict) or version != {"acvVersion": ACV_VERSION}:
-        raise AdapterError(f"first object must be {{'acvVersion': '{ACV_VERSION}'}}")
-    if not isinstance(request, dict):
-        raise AdapterError("second array item must be a request object")
-    vs_id = request.get("vsId")
-    if not isinstance(vs_id, int) or isinstance(vs_id, bool) or vs_id < 0:
-        raise AdapterError("'vsId' must be a non-negative integer")
-    if not isinstance(request.get("testGroups"), list):
-        raise AdapterError("'testGroups' must be an array")
     return version, request
+
+
+def _validate_group_parameters(request: dict[str, Any]) -> None:
+    algorithm = request["algorithm"].upper()
+    for group in request["testGroups"]:
+        tg_id = group["tgId"]
+        if group["testType"] != "AFT":
+            raise AdapterError(f"tgId={tg_id}: only testType 'AFT' is supported")
+        if algorithm == "HMAC-SM3":
+            for test in group["tests"]:
+                if len(test["key"]) * 4 != group["keyLen"]:
+                    raise AdapterError(
+                        f"tcId={test['tcId']}: key length does not match group keyLen"
+                    )
+            if group["macLen"] != 256:
+                raise AdapterError(f"tgId={tg_id}: HMAC-SM3 macLen must be 256")
+        elif algorithm == "SM4":
+            if group["keyLen"] != 128:
+                raise AdapterError(f"tgId={tg_id}: SM4 keyLen must be 128")
+        elif algorithm == authenticated_sm4.ALGORITHM:
+            if group["direction"] != "encrypt":
+                raise AdapterError(
+                    f"tgId={tg_id}: authenticated experiment supports encrypt only"
+                )
 
 
 def _validate_group_ids(request: dict[str, Any]) -> None:
@@ -281,6 +373,7 @@ def process_request(
     version: dict[str, Any], request: dict[str, Any], openssl: str, backend: str
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     _validate_group_ids(request)
+    _validate_group_parameters(request)
     algorithm = str(request.get("algorithm", "")).upper()
     mismatches: list[dict[str, Any]] = []
     handlers = {
@@ -302,7 +395,9 @@ def process_request(
             "backend": backend,
             "mismatches": mismatches,
         }
-    return [version, response], mismatches
+    envelope = [version, response]
+    validate_schema(envelope, RESPONSE_SCHEMA, "response")
+    return envelope, mismatches
 
 
 def write_response(path: Path, request_path: Path, response: list[dict[str, Any]]) -> None:
@@ -334,6 +429,15 @@ def write_response(path: Path, request_path: Path, response: list[dict[str, Any]
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        if args.capabilities:
+            if args.request_file is not None or args.output is not None:
+                raise AdapterError(
+                    "--capabilities cannot be combined with a request file or --output"
+                )
+            print(json.dumps(CAPABILITIES, indent=2, ensure_ascii=False))
+            return EXIT_SUCCESS
+        if args.request_file is None or args.output is None:
+            raise AdapterError("request_file and --output are required")
         version, request = load_request(args.request_file)
         openssl = runner.resolve_openssl(args.openssl) if args.backend != "gmssl" else ""
         response, mismatches = process_request(version, request, openssl, args.backend)

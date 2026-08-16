@@ -58,6 +58,8 @@
 - 请求只包含输入，响应按 `vsId`、`tgId`、`tcId` 返回 `md`、`mac`、`ct` 或 `pt`
 - 支持 SM3、HMAC-SM3、SM4，以及本项目实验性的 SM4-CTR-HMAC-SM3
 - 支持 `openssl`、`gmssl`、`cross` 后端；交叉不一致写入本地扩展 `localDiagnostics`
+- 请求和生成的响应都会通过仓库内 JSON Schema 校验
+- `--capabilities` 输出算法、模式、方向及长度约束等机器可读能力
 
 两个执行器都会输出每个测试用例的 PASS/FAIL，并区分测试失败与输入、环境错误。
 
@@ -83,8 +85,17 @@ gm-algorithm-validation/
 │   ├── sm4-ctr-hmac-sm3.json
 │   └── sm4.json
 ├── acvp/
-│   └── requests/
-│       └── sm3-request.json
+│   ├── schemas/
+│   │   ├── request-schema.json
+│   │   └── response-schema.json
+│   ├── requests/
+│   │   ├── sm3-request.json
+│   │   ├── hmac-sm3-request.json
+│   │   └── sm4-request.json
+│   └── responses/
+│       ├── sm3-response.json
+│       ├── hmac-sm3-response.json
+│       └── sm4-response.json
 ├── tests/
 │   ├── test_acvp_adapter.py
 │   ├── test_sm3.py
@@ -268,6 +279,14 @@ python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-respo
 
 请求使用 `acvVersion`、`vsId`、`testGroups`、`tgId` 和 `tcId` 层级，响应保留相同标识并返回计算结果。完整字段与限制参见 [ACVP 风格格式实验](docs/acvp-format-experiment.md)。
 
+查看本地实现能力：
+
+```powershell
+python acvp_adapter.py --capabilities
+```
+
+普通请求会在执行前通过 `acvp/schemas/request-schema.json` 校验，生成的响应会在写入前通过 `response-schema.json` 校验，验证器使用 `jsonschema 4.25.1` 的 Draft 2020-12 实现。组级字段包括 `testType`，HMAC-SM3 还包括 `keyLen`、`macLen`，SM4 包括 `direction`、`keyLen` 和 `mode`；`msgLen` 保持为测试用例级字段，因为同组测试可以有不同消息长度。
+
 批量运行全部向量并生成报告：
 
 ```powershell
@@ -305,7 +324,7 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 125 项测试：
+当前共有 128 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -320,12 +339,12 @@ python -m unittest discover -s tests -v
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
 - 5 项批量向量执行与汇总测试
-- 6 项 ACVP 风格请求与响应适配器测试
+- 9 项 ACVP 风格请求、响应、Schema 和能力描述测试
 
 本次实测结果：
 
 ```text
-Ran 125 tests in ...
+Ran 128 tests in ...
 
 OK
 ```

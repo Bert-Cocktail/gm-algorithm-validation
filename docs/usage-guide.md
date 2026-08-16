@@ -592,7 +592,7 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 125 项测试：
+当前共有 128 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -607,12 +607,12 @@ python -m unittest discover -s tests -v
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
 - 5 项批量向量执行与汇总测试
-- 6 项 ACVP 风格请求与响应适配器测试
+- 9 项 ACVP 风格请求、响应、Schema 和能力描述测试
 
 当前预期结果：
 
 ```text
-Ran 125 tests in ...
+Ran 128 tests in ...
 
 OK
 ```
@@ -843,7 +843,7 @@ git commit -m "描述本次修改"
 1. 提取 SM3、SM4 公共的 JSON、OpenSSL 和错误处理模块。
 2. 使用 OpenSSL EVP API 编写 C 语言后端。
 3. 使用同一批向量交叉验证 Python 和 C 后端。
-4. 将本地 ACVP 风格字段逐步映射到正式算法规范中的 testType 和参数集。
+4. 继续研究 ACVP 算法规范中的 MCT、GDT 等测试类型及正式参数集映射。
 5. 为 HMAC-SM3 增加独立正式标准向量。
 6. 研究流式大文件处理、操作系统密钥库和标准化认证加密容器。
 7. 增加 SM2 密钥生成、签名、验签和加解密实验。

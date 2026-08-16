@@ -6,7 +6,7 @@ import io
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -50,7 +50,7 @@ class TestAcvpAdapter(unittest.TestCase):
             "vsId": 1,
             "algorithm": "SM3",
             "testGroups": [
-                {"tgId": 1, "tests": [{"tcId": 1, "msg": "616263", "msgLen": 24}]}
+                {"tgId": 1, "testType": "AFT", "tests": [{"tcId": 1, "msg": "616263", "msgLen": 24}]}
             ],
         }
 
@@ -70,6 +70,9 @@ class TestAcvpAdapter(unittest.TestCase):
             "testGroups": [
                 {
                     "tgId": 1,
+                    "testType": "AFT",
+                    "keyLen": 128,
+                    "macLen": 256,
                     "tests": [
                         {
                             "tcId": 1,
@@ -97,14 +100,18 @@ class TestAcvpAdapter(unittest.TestCase):
             "testGroups": [
                 {
                     "tgId": 1,
+                    "testType": "AFT",
                     "mode": "ECB",
                     "direction": "encrypt",
+                    "keyLen": 128,
                     "tests": [{"tcId": 1, "key": SM4_KEY, "pt": SM4_KEY}],
                 },
                 {
                     "tgId": 2,
+                    "testType": "AFT",
                     "mode": "ECB",
                     "direction": "decrypt",
+                    "keyLen": 128,
                     "tests": [
                         {
                             "tcId": 2,
@@ -130,6 +137,11 @@ class TestAcvpAdapter(unittest.TestCase):
             "testGroups": [
                 {
                     "tgId": 1,
+                    "testType": "AFT",
+                    "direction": "encrypt",
+                    "sm4KeyLen": 128,
+                    "hmacKeyLen": 256,
+                    "tagLen": 256,
                     "tests": [
                         {
                             "tcId": 1,
@@ -158,8 +170,8 @@ class TestAcvpAdapter(unittest.TestCase):
             "vsId": 5,
             "algorithm": "SM3",
             "testGroups": [
-                {"tgId": 1, "tests": [{"tcId": 1, "msg": "", "msgLen": 0}]},
-                {"tgId": 1, "tests": [{"tcId": 2, "msg": "", "msgLen": 0}]},
+                {"tgId": 1, "testType": "AFT", "tests": [{"tcId": 1, "msg": "", "msgLen": 0}]},
+                {"tgId": 1, "testType": "AFT", "tests": [{"tcId": 2, "msg": "", "msgLen": 0}]},
             ],
         }
         exit_code, response = self.run_request(duplicate_request)
@@ -187,7 +199,7 @@ class TestAcvpAdapter(unittest.TestCase):
         request = {
             "vsId": 6,
             "algorithm": "SM3",
-            "testGroups": [{"tgId": 1, "tests": tests}],
+            "testGroups": [{"tgId": 1, "testType": "AFT", "tests": tests}],
         }
 
         with patch("gmssl_backend.gmssl_sm3", return_value="00" * 32):
@@ -201,6 +213,55 @@ class TestAcvpAdapter(unittest.TestCase):
             [item["tcId"] for item in diagnostics["mismatches"]], [1, 2]
         )
         self.assertEqual(len(response[1]["testGroups"][0]["tests"]), 2)
+
+    def test_capabilities_are_machine_readable(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output), redirect_stderr(io.StringIO()):
+            exit_code = acvp_adapter.main(["--capabilities"])
+
+        capabilities = json.loads(output.getvalue())
+        self.assertEqual(exit_code, acvp_adapter.EXIT_SUCCESS)
+        self.assertTrue(capabilities["localFormat"])
+        self.assertEqual(
+            [item["algorithm"] for item in capabilities["algorithms"]],
+            ["SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"],
+        )
+
+    def test_schema_rejects_missing_test_type(self) -> None:
+        request = {
+            "vsId": 7,
+            "algorithm": "SM3",
+            "testGroups": [
+                {"tgId": 1, "tests": [{"tcId": 1, "msg": "", "msgLen": 0}]}
+            ],
+        }
+
+        exit_code, response = self.run_request(request)
+
+        self.assertEqual(exit_code, acvp_adapter.EXIT_INPUT_ERROR)
+        self.assertEqual(response, [])
+
+    def test_hmac_group_key_length_must_match_test_key(self) -> None:
+        request = {
+            "vsId": 8,
+            "algorithm": "HMAC-SM3",
+            "testGroups": [
+                {
+                    "tgId": 1,
+                    "testType": "AFT",
+                    "keyLen": 256,
+                    "macLen": 256,
+                    "tests": [
+                        {"tcId": 1, "key": "00", "msg": "", "msgLen": 0}
+                    ],
+                }
+            ],
+        }
+
+        exit_code, response = self.run_request(request)
+
+        self.assertEqual(exit_code, acvp_adapter.EXIT_INPUT_ERROR)
+        self.assertEqual(response, [])
 
 
 if __name__ == "__main__":

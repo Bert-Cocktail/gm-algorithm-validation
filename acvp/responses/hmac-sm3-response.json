@@ -1,0 +1,15 @@
+[
+  {"acvVersion": "1.0"},
+  {
+    "vsId": 2,
+    "algorithm": "HMAC-SM3",
+    "testGroups": [
+      {
+        "tgId": 1,
+        "tests": [
+          {"tcId": 1, "mac": "0933617a88d312f6f9fb4b5f200e31a64d655e92f7fa2a43f55dfeeb8ab6788d"}
+        ]
+      }
+    ]
+  }
+]

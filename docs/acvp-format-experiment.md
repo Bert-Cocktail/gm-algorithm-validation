@@ -8,10 +8,12 @@
 
 ## 运行方法
 
-仓库提供 SM3 请求样例：
+仓库在 `acvp/requests` 与 `acvp/responses` 中分别提供 SM3、HMAC-SM3 和 SM4 请求与响应样例：
 
 ```powershell
 python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-response.json
+python acvp_adapter.py acvp\requests\hmac-sm3-request.json --output results\hmac-sm3-response.json
+python acvp_adapter.py acvp\requests\sm4-request.json --output results\sm4-response.json
 ```
 
 选择后端：
@@ -37,6 +39,7 @@ python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-respo
     "testGroups": [
       {
         "tgId": 1,
+        "testType": "AFT",
         "tests": [
           {"tcId": 1, "msg": "616263", "msgLen": 24}
         ]
@@ -80,6 +83,22 @@ python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-respo
 
 SM4 的 ECB 组不需要 `iv`；CBC 和 CTR 需要 128 bit IV。SM4-CTR-HMAC-SM3 是本项目的实验组合，不是这里声称的 ACVP 标准算法标识。
 
+组级 `testType` 当前只支持 `AFT`。HMAC-SM3 组还声明 `keyLen` 与 `macLen`，SM4 组声明 `direction`、`keyLen` 与 `mode`。`msgLen` 位于具体测试用例中，因为同一组可以包含不同长度的消息。
+
+## JSON Schema 校验
+
+请求执行前使用 `acvp/schemas/request-schema.json` 校验，响应写入前使用 `acvp/schemas/response-schema.json` 校验。Schema 使用 Draft 2020-12 声明，并由开发依赖 `jsonschema 4.25.1` 的完整 Draft 2020-12 验证器执行。
+
+## 能力描述
+
+运行：
+
+```powershell
+python acvp_adapter.py --capabilities
+```
+
+输出包含四种算法的 `revision`、`testTypes`、消息或密钥长度限制，以及 SM4 的模式、方向、IV 和负载长度约束。`localFormat: true` 明确表示这是本地能力描述，不是发送到 ACVTS 的正式注册对象。
+
 ## 交叉后端诊断
 
 选择 `--backend cross` 时，两套后端都会运行。若结果不一致，程序继续处理后续测试，使用 OpenSSL 结果完成响应，并返回退出码 `1`。响应额外包含：
@@ -113,7 +132,7 @@ SM4 的 ECB 组不需要 `iv`；CBC 和 CTR 需要 128 bit IV。SM4-CTR-HMAC-SM3
 
 ## 测试覆盖
 
-`tests/test_acvp_adapter.py` 包含 6 项测试，覆盖 SM3、HMAC-SM3、SM4 加解密、认证组合、重复 ID 与覆盖保护，以及多个交叉后端不一致的完整收集。
+`tests/test_acvp_adapter.py` 包含 9 项测试，覆盖 SM3、HMAC-SM3、SM4 加解密、认证组合、重复 ID 与覆盖保护、多个交叉后端不一致的完整收集、能力描述、Schema 必填字段及组级长度一致性。
 
 ```powershell
 python -m unittest tests.test_acvp_adapter -v

@@ -1,0 +1,38 @@
+[
+  {"acvVersion": "1.0"},
+  {
+    "vsId": 3,
+    "algorithm": "SM4",
+    "testGroups": [
+      {
+        "tgId": 1,
+        "testType": "AFT",
+        "direction": "encrypt",
+        "keyLen": 128,
+        "mode": "ECB",
+        "tests": [
+          {
+            "tcId": 1,
+            "key": "0123456789abcdeffedcba9876543210",
+            "pt": "0123456789abcdeffedcba9876543210"
+          }
+        ]
+      },
+      {
+        "tgId": 2,
+        "testType": "AFT",
+        "direction": "decrypt",
+        "keyLen": 128,
+        "mode": "CBC",
+        "tests": [
+          {
+            "tcId": 2,
+            "key": "0123456789abcdeffedcba9876543210",
+            "iv": "000102030405060708090a0b0c0d0e0f",
+            "ct": "a9a268883a336315bac0c9c9ff350ab1"
+          }
+        ]
+      }
+    ]
+  }
+]
