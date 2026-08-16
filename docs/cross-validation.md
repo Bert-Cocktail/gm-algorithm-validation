@@ -47,11 +47,11 @@ GmSSL 3.2.2 自带的 `crypt_ecb()` 和 `crypt_cbc()` 会处理 padding，不能
 
 | 算法 | JSON 向量数 | OpenSSL | GmSSL 3.2.2 | 结果 |
 |---|---:|---|---|---|
-| SM3 | 8 | 通过 | 通过 | 一致 |
-| HMAC-SM3 | 1 | 通过 | 通过 | 一致 |
-| SM4 ECB/CBC/CTR | 10 | 通过 | 通过 | 一致 |
-| SM4-CTR-HMAC-SM3 | 1 | 通过 | 通过 | 一致 |
-| 合计 | 20 | 通过 | 通过 | 一致 |
+| SM3 | 15 | 通过 | 通过 | 一致 |
+| HMAC-SM3 | 4 | 通过 | 通过 | 一致 |
+| SM4 ECB/CBC/CTR | 28 | 通过 | 通过 | 一致 |
+| SM4-CTR-HMAC-SM3 | 6 | 通过 | 通过 | 一致 |
+| 合计 | 53 | 通过 | 通过 | 一致 |
 
 另外验证了：
 
@@ -70,7 +70,7 @@ OK
 全项目测试结果：
 
 ```text
-Ran 106 tests in ...
+Ran 114 tests in ...
 
 OK
 ```
@@ -81,7 +81,7 @@ OK
 python runner.py vectors\sm4.json --backend cross --result-json results\sm4-cross.json
 ```
 
-报告记录所选后端、逐用例状态、expected/actual、汇总和退出码。若两套后端产生不同结果，报告状态为 `failed`，并写入 `error.type: "backend_mismatch"`。
+报告记录所选后端、逐用例状态、expected/actual、汇总和退出码。若两套后端产生不同结果，报告状态为 `failed`，并写入 `error.type: "backend_mismatch"`、`tcId`、`operation`、`openssl` 和 `gmssl`；SM4 还会包含 `mode` 与 `direction`。
 
 ## 当前边界
 
@@ -89,5 +89,5 @@ python runner.py vectors\sm4.json --backend cross --result-json results\sm4-cros
 - `runner.py` 已支持 `--backend openssl|gmssl|cross`；OpenSSL 仍是默认后端。
 - `gmssl` 模式不查找 OpenSSL；`cross` 模式逐项比较两套结果，不一致时返回退出码 `1`。
 - HMAC 模式层以及 ECB/CBC/CTR 组合代码属于本项目包装逻辑，密码原语来自 GmSSL。
-- 14 个非标准实验/回归向量的 `source` 已更新为 OpenSSL 1.1.1i 生成、Python gmssl 3.2.2 交叉验证。标准和推导向量的来源说明保持不变。
+- 47 个非标准实验/回归向量的 `source` 标明由 OpenSSL 1.1.1i 生成、Python gmssl 3.2.2 交叉验证。4 个标准向量和 2 个推导向量的来源说明保持独立。
 - Python `gmssl` 项目与 GmSSL 官方 C 项目不能简单视为同一个发行物，文档中明确记录的是 PyPI `gmssl 3.2.2`。

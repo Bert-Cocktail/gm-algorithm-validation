@@ -112,16 +112,23 @@ def run_tests(
 ) -> int:
     passed = 0
     for test in tests:
-        actual_package = encrypt_fn(
-            openssl,
-            test["sm4Key"],
-            test["hmacKey"],
-            bytes.fromhex(test["pt"]),
-            iv=bytes.fromhex(test["iv"]),
-        )
-        recovered = decrypt_fn(
-            openssl, test["sm4Key"], test["hmacKey"], actual_package
-        )
+        try:
+            actual_package = encrypt_fn(
+                openssl,
+                test["sm4Key"],
+                test["hmacKey"],
+                bytes.fromhex(test["pt"]),
+                iv=bytes.fromhex(test["iv"]),
+            )
+            recovered = decrypt_fn(
+                openssl, test["sm4Key"], test["hmacKey"], actual_package
+            )
+        except Exception as error:
+            if hasattr(error, "set_test_context"):
+                error.set_test_context(
+                    test["tcId"], algorithm=authenticated_sm4.ALGORITHM
+                )
+            raise
         actual_pt = recovered.hex()
         matches = (
             actual_package["ciphertext"] == test["ct"]

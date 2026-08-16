@@ -23,6 +23,15 @@
           "key": "0123456789abcdeffedcba9876543210",
           "pt": "0123456789abcdeffedcba98765432100123456789abcdeffedcba9876543210",
           "ct": "681edf34d206965e86b3e94f536e4246681edf34d206965e86b3e94f536e4246"
+        },
+        {
+          "tcId": 11,
+          "description": "SM4-ECB encryption of three blocks",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+          "ct": "06989c613da668ad2a8df782e1a8f96a4b910651754b5553f10cfa0c8a09e9e5f42952cf94ac83688437c9b671d6c7fa"
         }
       ]
     },
@@ -47,6 +56,15 @@
           "key": "0123456789abcdeffedcba9876543210",
           "pt": "0123456789abcdeffedcba98765432100123456789abcdeffedcba9876543210",
           "ct": "681edf34d206965e86b3e94f536e4246681edf34d206965e86b3e94f536e4246"
+        },
+        {
+          "tcId": 12,
+          "description": "SM4-ECB decryption of three blocks",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+          "ct": "06989c613da668ad2a8df782e1a8f96a4b910651754b5553f10cfa0c8a09e9e5f42952cf94ac83688437c9b671d6c7fa"
         }
       ]
     },
@@ -73,6 +91,16 @@
           "iv": "000102030405060708090a0b0c0d0e0f",
           "pt": "0123456789abcdeffedcba98765432100123456789abcdeffedcba9876543210",
           "ct": "a9a268883a336315bac0c9c9ff350ab1b236a4a85616d4aabf0a83555c7d4115"
+        },
+        {
+          "tcId": 13,
+          "description": "SM4-CBC encryption of three blocks",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+          "ct": "2677f46b09c122cc975533105bd4a22ad9ee98830e69745c9827f934a19621f8db45a48645909eefda6bae89a72e659b"
         }
       ]
     },
@@ -99,6 +127,16 @@
           "iv": "000102030405060708090a0b0c0d0e0f",
           "pt": "0123456789abcdeffedcba98765432100123456789abcdeffedcba9876543210",
           "ct": "a9a268883a336315bac0c9c9ff350ab1b236a4a85616d4aabf0a83555c7d4115"
+        },
+        {
+          "tcId": 14,
+          "description": "SM4-CBC decryption of three blocks",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f",
+          "ct": "2677f46b09c122cc975533105bd4a22ad9ee98830e69745c9827f934a19621f8db45a48645909eefda6bae89a72e659b"
         }
       ]
     },
@@ -115,6 +153,76 @@
           "iv": "000102030405060708090a0b0c0d0e0f",
           "pt": "0123456789abcdeffedcba987654321001020304",
           "ct": "07bbd906b40da542d4514d1a97fccb7a6e050e4f"
+        },
+        {
+          "tcId": 15,
+          "description": "SM4-CTR encryption of a 1-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "00",
+          "ct": "06"
+        },
+        {
+          "tcId": 17,
+          "description": "SM4-CTR encryption of a 15-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e",
+          "ct": "06999e6239a36eaa2284fd89eda5f7"
+        },
+        {
+          "tcId": 19,
+          "description": "SM4-CTR encryption of a 16-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f",
+          "ct": "06999e6239a36eaa2284fd89eda5f765"
+        },
+        {
+          "tcId": 21,
+          "description": "SM4-CTR encryption of a 17-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f10",
+          "ct": "06999e6239a36eaa2284fd89eda5f7657f"
+        },
+        {
+          "tcId": 23,
+          "description": "SM4-CTR encryption of a 31-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e",
+          "ct": "06999e6239a36eaa2284fd89eda5f7657f161f5854b6ea16c28809fe9d1db3"
+        },
+        {
+          "tcId": 25,
+          "description": "SM4-CTR encryption of a 32-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+          "ct": "06999e6239a36eaa2284fd89eda5f7657f161f5854b6ea16c28809fe9d1db305"
+        },
+        {
+          "tcId": 27,
+          "description": "SM4-CTR encryption of a 33-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+          "ct": "06999e6239a36eaa2284fd89eda5f7657f161f5854b6ea16c28809fe9d1db3053c"
         }
       ]
     },
@@ -131,6 +239,76 @@
           "iv": "000102030405060708090a0b0c0d0e0f",
           "pt": "0123456789abcdeffedcba987654321001020304",
           "ct": "07bbd906b40da542d4514d1a97fccb7a6e050e4f"
+        },
+        {
+          "tcId": 16,
+          "description": "SM4-CTR decryption of a 1-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "00",
+          "ct": "06"
+        },
+        {
+          "tcId": 18,
+          "description": "SM4-CTR decryption of a 15-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e",
+          "ct": "06999e6239a36eaa2284fd89eda5f7"
+        },
+        {
+          "tcId": 20,
+          "description": "SM4-CTR decryption of a 16-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f",
+          "ct": "06999e6239a36eaa2284fd89eda5f765"
+        },
+        {
+          "tcId": 22,
+          "description": "SM4-CTR decryption of a 17-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f10",
+          "ct": "06999e6239a36eaa2284fd89eda5f7657f"
+        },
+        {
+          "tcId": 24,
+          "description": "SM4-CTR decryption of a 31-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e",
+          "ct": "06999e6239a36eaa2284fd89eda5f7657f161f5854b6ea16c28809fe9d1db3"
+        },
+        {
+          "tcId": 26,
+          "description": "SM4-CTR decryption of a 32-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+          "ct": "06999e6239a36eaa2284fd89eda5f7657f161f5854b6ea16c28809fe9d1db305"
+        },
+        {
+          "tcId": 28,
+          "description": "SM4-CTR decryption of a 33-byte message",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0123456789abcdeffedcba9876543210",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+          "ct": "06999e6239a36eaa2284fd89eda5f7657f161f5854b6ea16c28809fe9d1db3053c"
         }
       ]
     }

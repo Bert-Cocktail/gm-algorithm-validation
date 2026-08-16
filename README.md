@@ -24,7 +24,8 @@
 
 ### HMAC-SM3
 
-- 使用十六进制密钥对文本、十六进制消息或文件生成认证 tag
+- 使用原始二进制密钥文件对文本、十六进制消息或文件生成认证 tag
+- 可生成随机 HMAC 密钥文件；旧 `--key-hex` 参数仅保留兼容
 - 使用恒定时间比较验证已有 tag
 - 正确验证输出 `OK`，不匹配输出 `FAIL`
 - tag 固定为 32 byte，即 64 个十六进制字符
@@ -43,7 +44,7 @@
 ### GmSSL 独立交叉验证
 
 - 使用 Python `gmssl 3.2.2` 作为第二套密码原语实现
-- 交叉验证全部 20 个 SM3、HMAC-SM3、SM4 和认证组合向量
+- 交叉验证全部 53 个 SM3、HMAC-SM3、SM4 和认证组合向量
 - 使用 GmSSL 原始 SM4 分组接口组合无 padding ECB、CBC 和 CTR
 - `runner.py` 支持 `openssl`、`gmssl` 和 `cross` 三种后端
 - `cross` 会逐项比较 OpenSSL 与 GmSSL，任何不一致都返回测试失败
@@ -135,19 +136,25 @@ python gmcrypto.py sm3 --file examples\message.txt
 
 三种方式都输出 64 个十六进制字符的 SM3 摘要。`--text` 默认使用 UTF-8，可通过 `--encoding` 指定其他文本编码；`--file` 由 OpenSSL 直接读取，Python 不会把整个文件载入内存。
 
+生成随机的 32 byte HMAC 密钥文件：
+
+```powershell
+python gmcrypto.py generate-hmac-key --output local.hmackey
+```
+
 生成 HMAC-SM3 tag：
 
 ```powershell
-python gmcrypto.py hmac-sm3 --key-hex 00112233445566778899aabbccddeeff --text "abc"
+python gmcrypto.py hmac-sm3 --key-file local.hmackey --text "abc"
 ```
 
 验证 tag：
 
 ```powershell
-python gmcrypto.py hmac-sm3 --key-hex 00112233445566778899aabbccddeeff --text "abc" --verify 0933617a88d312f6f9fb4b5f200e31a64d655e92f7fa2a43f55dfeeb8ab6788d
+python gmcrypto.py hmac-sm3 --key-file local.hmackey --text "abc" --verify <64个十六进制字符的tag>
 ```
 
-HMAC 验证成功返回 `OK` 和退出码 `0`，不匹配返回 `FAIL` 和退出码 `1`。
+`.hmackey` 是原始二进制密钥，不是十六进制文本。HMAC 验证成功返回 `OK` 和退出码 `0`，不匹配返回 `FAIL` 和退出码 `1`。
 
 生成认证加密专用密钥文件：
 
@@ -181,9 +188,9 @@ python runner.py vectors\sm4-ctr-hmac-sm3.json
 当前结果：
 
 ```text
-[PASS] tcId=1 algorithm=SM4-CTR-HMAC-SM3
+[PASS] tcId=1 ... tcId=6
 
-Total: 1, Passed: 1, Failed: 0
+Total: 6, Passed: 6, Failed: 0
 ```
 
 运行 HMAC-SM3 JSON 回归向量：
@@ -201,16 +208,9 @@ python runner.py vectors\sm3.json
 当前结果：
 
 ```text
-[PASS] tcId=1
-[PASS] tcId=2
-[PASS] tcId=3
-[PASS] tcId=4
-[PASS] tcId=5
-[PASS] tcId=6
-[PASS] tcId=7
-[PASS] tcId=8
+[PASS] tcId=1 ... tcId=15
 
-Total: 8, Passed: 8, Failed: 0
+Total: 15, Passed: 15, Failed: 0
 ```
 
 统一入口会根据 JSON 中的 `algorithm` 字段自动选择 SM3、HMAC-SM3、SM4 或 SM4-CTR-HMAC-SM3。运行 SM4 向量：
@@ -222,18 +222,9 @@ python runner.py vectors\sm4.json
 当前结果：
 
 ```text
-[PASS] tcId=1 mode=ECB direction=encrypt
-[PASS] tcId=5 mode=ECB direction=encrypt
-[PASS] tcId=2 mode=ECB direction=decrypt
-[PASS] tcId=6 mode=ECB direction=decrypt
-[PASS] tcId=3 mode=CBC direction=encrypt
-[PASS] tcId=7 mode=CBC direction=encrypt
-[PASS] tcId=4 mode=CBC direction=decrypt
-[PASS] tcId=8 mode=CBC direction=decrypt
-[PASS] tcId=9 mode=CTR direction=encrypt
-[PASS] tcId=10 mode=CTR direction=decrypt
+[PASS] tcId=1 ... tcId=28
 
-Total: 10, Passed: 10, Failed: 0
+Total: 28, Passed: 28, Failed: 0
 ```
 
 选择密码后端：
@@ -250,7 +241,7 @@ python runner.py vectors\sm3.json --backend cross
 python runner.py vectors\sm3.json --backend cross --result-json results\sm3-cross.json
 ```
 
-终端仍显示原有 PASS/FAIL；结果文件记录算法、后端、退出码、汇总以及每个 `tcId` 的 expected/actual。输入错误和后端不一致也会生成带 `error` 字段的报告。结果文件采用同目录临时文件原子写入，并拒绝覆盖输入向量文件。
+终端仍显示原有 PASS/FAIL；结果文件记录算法、后端、退出码、汇总以及每个 `tcId` 的 expected/actual。后端不一致会精确记录当前 `tcId`、operation、OpenSSL 结果和 GmSSL 结果；SM4 还记录模式与方向。结果文件采用同目录临时文件原子写入，并拒绝覆盖输入向量文件。
 
 - `openssl`：默认后端，只运行 OpenSSL。
 - `gmssl`：只运行 Python gmssl，不要求 OpenSSL 在 `PATH`。
@@ -281,25 +272,25 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 106 项测试：
+当前共有 114 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
 - 7 项普通用户 SM3 CLI 测试
-- 8 项 HMAC-SM3 CLI 测试
-- 6 项普通用户认证加密 CLI 测试
+- 13 项 HMAC-SM3 CLI 测试
+- 8 项普通用户认证加密 CLI 测试
 - 8 项 HMAC-SM3 向量执行器测试
 - 5 项统一入口分派测试
 - 21 项认证 SM4 格式、加解密与篡改测试
 - 6 项认证 SM4 向量执行器测试
 - 7 项 OpenSSL/GmSSL 交叉验证测试
 - 5 项 runner 后端选择测试
-- 5 项结构化结果文件测试
+- 6 项结构化结果文件测试
 
 本次实测结果：
 
 ```text
-Ran 106 tests in ...
+Ran 114 tests in ...
 
 OK
 ```
@@ -325,7 +316,7 @@ SM4 测试包括 ECB 国标向量加解密、CBC 与 CTR 往返、CTR 非整分�
 - `msgLen`：消息的 bit 长度
 - `md`：预期的 256 bit SM3 摘要
 
-当前 `sm3.json` 共 8 个用例：2 个国标向量，以及空消息和 55、56、63、64、65 byte 全零消息组成的 6 个边界回归向量。回归向量由 OpenSSL 1.1.1i 生成，并已使用 Python gmssl 3.2.2 交叉验证。
+当前 `sm3.json` 共 15 个用例：2 个国标向量，以及空消息和 1、31、32、33、55、56、63、64、65、127、128、129 byte 全零消息组成的 13 个边界回归向量。回归向量由 OpenSSL 1.1.1i 生成，并已使用 Python gmssl 3.2.2 交叉验证。
 
 详细内容参见 [SM3 实验记录](docs/sm3-experiment.md)。
 
@@ -350,13 +341,15 @@ SM4 测试用例示例：
 - `mode`：当前支持 `ECB`、`CBC`、`CTR`
 - `direction`：`encrypt` 或 `decrypt`
 
-当前 `sm4.json` 共 10 个用例：
+当前 `sm4.json` 共 28 个用例：
 
 - `tcId=1`、`tcId=2`：`GB/T 32907-2016` 单分组标准向量。
 - `tcId=3`、`tcId=4`：OpenSSL 单分组 CBC 实验向量，已使用 Python gmssl 3.2.2 交叉验证。
 - `tcId=5`、`tcId=6`：根据标准结果和 ECB 分组独立性得到的两分组推导向量。
 - `tcId=7`、`tcId=8`：OpenSSL 两分组 CBC 实验向量，已使用 Python gmssl 3.2.2 交叉验证。
 - `tcId=9`、`tcId=10`：OpenSSL 20 byte CTR 加解密实验向量，已使用 Python gmssl 3.2.2 交叉验证。
+- `tcId=11` 至 `tcId=14`：ECB/CBC 三分组加解密实验向量。
+- `tcId=15` 至 `tcId=28`：CTR 的 1、15、16、17、31、32、33 byte 加解密边界向量。
 
 两个相同明文分组在 ECB 中产生相同密文分组，在 CBC 中产生不同密文分组。CTR 可处理非 16 byte 整数倍的数据。
 
@@ -374,7 +367,7 @@ SM4 测试用例示例：
 - `gmcrypto.py` 已开放实验性的 SM4-CTR + HMAC-SM3 文件认证加密；该 JSON 格式未经标准化或安全审计，不应视为生产协议。
 - 认证加密密钥文件包含明文十六进制密钥，必须保存在仓库外并限制访问；程序不会代替操作系统密钥库。
 - 认证加密输入文件和 JSON 包限制为 64 MiB，当前实现会把内容读入内存。
-- `--key-hex` 会出现在命令历史和进程参数中，只适合学习实验，不应直接传入真实生产密钥。
+- HMAC-SM3 推荐使用仓库外的原始二进制 `.hmackey` 文件；`--key-hex` 仅为兼容保留，会进入命令历史和进程参数。
 
 ## 下一步计划
 

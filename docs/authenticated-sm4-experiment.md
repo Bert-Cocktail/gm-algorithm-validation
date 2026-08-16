@@ -108,7 +108,7 @@ python gmcrypto.py decrypt-auth --key-file auth-key.json --package package.json 
 
 ## 固定回归向量
 
-`vectors/sm4-ctr-hmac-sm3.json` 当前包含 1 个固定实验向量：
+`vectors/sm4-ctr-hmac-sm3.json` 当前包含 6 个固定实验向量：原有 `abc` 向量，以及空消息、1、16、17、33 byte 明文边界向量。
 
 ```text
 明文: 616263
@@ -128,9 +128,9 @@ python runner.py vectors\sm4-ctr-hmac-sm3.json
 预期结果：
 
 ```text
-[PASS] tcId=1 algorithm=SM4-CTR-HMAC-SM3
+[PASS] tcId=1 ... tcId=6
 
-Total: 1, Passed: 1, Failed: 0
+Total: 6, Passed: 6, Failed: 0
 ```
 
 ## 当前测试
@@ -141,12 +141,12 @@ Total: 1, Passed: 1, Failed: 0
 python -m unittest tests.test_authenticated_sm4 -v
 ```
 
-当前共有 21 项认证 SM4 核心测试、6 项组合向量执行器测试和 6 项普通用户认证加密 CLI 测试，覆盖密钥长度、格式编码、固定向量、空消息、非整分组消息、随机 IV、文件往返、覆盖保护，以及 IV、密文、tag 和密钥篡改。CLI 测试还确认认证失败时不会产生明文输出。
+当前共有 21 项认证 SM4 核心测试、6 项组合向量执行器测试和 8 项普通用户认证加密 CLI 测试，覆盖密钥长度、格式编码、固定向量、空消息、非整分组消息、随机 IV、文件往返、覆盖保护，以及 IV、密文、tag 和密钥篡改。CLI 测试还确认 tag 篡改、错误 HMAC 密钥或截断 JSON 时不会产生明文输出。
 
 全量测试结果：
 
 ```text
-Ran 106 tests in ...
+Ran 114 tests in ...
 
 OK
 ```

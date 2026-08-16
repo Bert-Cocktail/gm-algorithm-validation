@@ -128,6 +128,8 @@ CTR 将连续计数器值用 SM4 加密，产生密钥流，再与消息异或�
 
 `tcId=9`、`tcId=10` 使用 20 byte 消息验证 CTR 加密和解密。密文由 OpenSSL 1.1.1i 生成，并已使用 Python gmssl 3.2.2 交叉验证；它们仍是实验向量，不是本项目声称的国标向量。
 
+新增 `tcId=11` 至 `tcId=14` 验证 ECB/CBC 三分组加解密；`tcId=15` 至 `tcId=28` 验证 CTR 的 1、15、16、17、31、32、33 byte 加解密边界。它们同样由 OpenSSL 生成并经 Python gmssl 3.2.2 交叉验证。
+
 CTR 的 IV 在这里作为初始计数器。它不必保密，但在同一密钥下绝不能重复；重复会导致密钥流复用并泄露明文关系。
 
 实际执行结果：
@@ -144,7 +146,7 @@ CTR 的 IV 在这里作为初始计数器。它不必保密，但在同一密钥
 [PASS] tcId=9 mode=CTR direction=encrypt
 [PASS] tcId=10 mode=CTR direction=decrypt
 
-Total: 10, Passed: 10, Failed: 0
+Total: 28, Passed: 28, Failed: 0
 ```
 
 ## 9. IV 对比实验
@@ -213,12 +215,12 @@ python -m unittest discover -s tests -v
 本次实测结果：
 
 ```text
-Ran 106 tests in ...
+Ran 114 tests in ...
 
 OK
 ```
 
-其中 SM4 测试为 19 项；普通用户 CLI 包含 7 项 SM3 测试和 8 项 HMAC-SM3 测试。
+其中 SM4 单元测试为 19 项；普通用户 CLI 包含 7 项 SM3 测试和 13 项 HMAC-SM3 测试。正式 SM4 JSON 已扩充到 28 个向量，新增 ECB/CBC 三分组实验及 CTR 的 1、15、16、17、31、32、33 byte 加解密边界。
 
 ## 12. 安全性分析
 
@@ -233,7 +235,7 @@ OK
 
 ## 13. 实验结论
 
-本实验完成了基于 OpenSSL 的 SM4-ECB、SM4-CBC 和 SM4-CTR 验证闭环。2 个 ECB 国标用例、2 个 ECB 推导用例、4 个 CBC 和 2 个 CTR 本地实验用例全部通过，19 项 SM4 测试均通过。
+本实验完成了基于 OpenSSL 的 SM4-ECB、SM4-CBC 和 SM4-CTR 验证闭环。当前 28 个正式 JSON 向量全部通过 OpenSSL/GmSSL 交叉验证，19 项 SM4 单元测试均通过。
 
 实验验证了 SM4 的 128 bit 密钥、ECB/CBC 分组约束、CBC 加解密往返、CTR 非整分组处理以及 IV/计数器规则。当前成果是算法测试向量执行器，还不是面向实际文件的完整加密方案。
 

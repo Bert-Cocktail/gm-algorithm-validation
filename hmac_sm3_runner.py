@@ -126,7 +126,12 @@ def run_tests(
 ) -> int:
     passed = 0
     for test in tests:
-        actual = hmac_fn(openssl, test["key"], bytes.fromhex(test["msg"]))
+        try:
+            actual = hmac_fn(openssl, test["key"], bytes.fromhex(test["msg"]))
+        except Exception as error:
+            if hasattr(error, "set_test_context"):
+                error.set_test_context(test["tcId"])
+            raise
         matches = actual == test["tag"]
         if results is not None:
             results.append(

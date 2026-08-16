@@ -63,8 +63,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     hmac_source.add_argument(
         "--file", type=Path, help="file whose bytes will be authenticated"
     )
-    hmac_parser.add_argument(
-        "--key-hex", required=True, help="HMAC key bytes in hexadecimal"
+    hmac_key = hmac_parser.add_mutually_exclusive_group(required=True)
+    hmac_key.add_argument(
+        "--key-file", type=Path, help="file containing the raw HMAC key bytes"
+    )
+    hmac_key.add_argument(
+        "--key-hex", help="legacy HMAC key input in hexadecimal"
     )
     hmac_parser.add_argument(
         "--verify",
@@ -87,6 +91,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     keygen_parser.add_argument("--output", type=Path, required=True)
     keygen_parser.add_argument(
+        "--force", action="store_true", help="replace an existing output file"
+    )
+
+    hmac_keygen_parser = commands.add_parser(
+        "generate-hmac-key", help="generate a raw binary HMAC key file"
+    )
+    hmac_keygen_parser.add_argument("--output", type=Path, required=True)
+    hmac_keygen_parser.add_argument(
+        "--bytes", type=int, default=32, help="key length in bytes (default: 32)"
+    )
+    hmac_keygen_parser.add_argument(
         "--force", action="store_true", help="replace an existing output file"
     )
 
@@ -294,6 +309,12 @@ def run_generate_auth_key(args: argparse.Namespace) -> None:
     write_atomic(args.output, encoded, force=args.force)
 
 
+def run_generate_hmac_key(args: argparse.Namespace) -> None:
+    if args.bytes < 1 or args.bytes > 4096:
+        raise UserInputError("--bytes must be between 1 and 4096")
+    write_atomic(args.output, secrets.token_bytes(args.bytes), force=args.force)
+
+
 def run_encrypt_auth(args: argparse.Namespace, openssl: str) -> None:
     sm4_key, hmac_key = load_auth_keys(args.key_file)
     if args.file is not None:
@@ -322,9 +343,15 @@ def run_decrypt_auth(args: argparse.Namespace, openssl: str) -> None:
 
 
 def run_hmac_sm3(args: argparse.Namespace, openssl: str) -> tuple[str, bool | None]:
-    key_hex = normalize_hex(args.key_hex, "--key-hex")
-    if not key_hex:
-        raise UserInputError("--key-hex must not be empty")
+    if args.key_file is not None:
+        key = read_limited_file(args.key_file, "HMAC key file")
+        if not key:
+            raise UserInputError("HMAC key file must not be empty")
+        key_hex = key.hex()
+    else:
+        key_hex = normalize_hex(args.key_hex, "--key-hex")
+        if not key_hex:
+            raise UserInputError("--key-hex must not be empty")
 
     if args.file is not None:
         if args.encoding != "utf-8":
@@ -360,6 +387,10 @@ def main(
     try:
         if args.command == "generate-auth-key":
             run_generate_auth_key(args)
+            print(args.output, file=output)
+            return EXIT_SUCCESS
+        if args.command == "generate-hmac-key":
+            run_generate_hmac_key(args)
             print(args.output, file=output)
             return EXIT_SUCCESS
         openssl = runner.resolve_openssl(args.openssl)

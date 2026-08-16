@@ -127,6 +127,68 @@ class TestGmcryptoHmacSm3(unittest.TestCase):
         self.assertEqual(result, gmcrypto.EXIT_SUCCESS)
         self.assertEqual(tag, ABC_HMAC)
 
+    def test_raw_key_file_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            key_path = Path(directory_name) / "test.hmackey"
+            key_path.write_bytes(bytes.fromhex(HMAC_KEY))
+
+            result, tag, errors = self.run_command(
+                ["hmac-sm3", "--key-file", str(key_path), "--text", "abc"]
+            )
+
+        self.assertEqual(result, gmcrypto.EXIT_SUCCESS)
+        self.assertEqual(tag, ABC_HMAC)
+        self.assertEqual(errors, "")
+
+    def test_generate_hmac_key_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            key_path = Path(directory_name) / "generated.hmackey"
+
+            result, reported, errors = self.run_command(
+                ["generate-hmac-key", "--output", str(key_path)]
+            )
+            key = key_path.read_bytes()
+
+        self.assertEqual(result, gmcrypto.EXIT_SUCCESS)
+        self.assertEqual(reported, str(key_path))
+        self.assertEqual(errors, "")
+        self.assertEqual(len(key), 32)
+
+    def test_empty_hmac_key_file_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            key_path = Path(directory_name) / "empty.hmackey"
+            key_path.write_bytes(b"")
+
+            result, _tag, errors = self.run_command(
+                ["hmac-sm3", "--key-file", str(key_path), "--text", "abc"]
+            )
+
+        self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+        self.assertIn("must not be empty", errors)
+
+    def test_missing_hmac_key_file_is_rejected(self) -> None:
+        result, _tag, errors = self.run_command(
+            ["hmac-sm3", "--key-file", "missing.hmackey", "--text", "abc"]
+        )
+
+        self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+        self.assertIn("not found", errors)
+
+    def test_invalid_generated_hmac_key_length_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            result, _reported, errors = self.run_command(
+                [
+                    "generate-hmac-key",
+                    "--output",
+                    str(Path(directory_name) / "key.hmackey"),
+                    "--bytes",
+                    "0",
+                ]
+            )
+
+        self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+        self.assertIn("between 1 and 4096", errors)
+
     def test_verify_success(self) -> None:
         result, status, _errors = self.run_command(
             [
@@ -288,6 +350,54 @@ class TestGmcryptoAuthenticatedEncryption(unittest.TestCase):
             result, _, errors = self.run_command(
                 ["decrypt-auth", "--key-file", str(key_file),
                  "--package", str(package_path), "--output", str(output_path)]
+            )
+
+            self.assertEqual(result, gmcrypto.EXIT_VERIFY_FAILURE)
+            self.assertIn("authentication failed", errors)
+            self.assertFalse(output_path.exists())
+
+    def test_truncated_package_creates_no_plaintext(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            key_file = self.write_key_file(directory)
+            package_path = directory / "truncated.json"
+            output_path = directory / "must-not-exist.bin"
+            package_path.write_text('{"version": 1,', encoding="utf-8")
+
+            result, _, errors = self.run_command(
+                [
+                    "decrypt-auth", "--key-file", str(key_file),
+                    "--package", str(package_path), "--output", str(output_path),
+                ]
+            )
+
+            self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+            self.assertIn("valid UTF-8 JSON", errors)
+            self.assertFalse(output_path.exists())
+
+    def test_wrong_hmac_key_creates_no_plaintext(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            key_file = self.write_key_file(directory)
+            wrong_key_file = directory / "wrong-auth-key.json"
+            package_path = directory / "package.json"
+            output_path = directory / "must-not-exist.bin"
+            wrong_key_file.write_text(
+                json.dumps({"sm4Key": SM4_KEY, "hmacKey": "ff" * 32}),
+                encoding="utf-8",
+            )
+            self.run_command(
+                [
+                    "encrypt-auth", "--key-file", str(key_file), "--text", "secret",
+                    "--output", str(package_path),
+                ]
+            )
+
+            result, _, errors = self.run_command(
+                [
+                    "decrypt-auth", "--key-file", str(wrong_key_file),
+                    "--package", str(package_path), "--output", str(output_path),
+                ]
             )
 
             self.assertEqual(result, gmcrypto.EXIT_VERIFY_FAILURE)

@@ -60,7 +60,7 @@ python runner.py vectors\sm3.json
 
 ## 5. 正式向量结果
 
-当前 `vectors/sm3.json` 包含 8 个测试向量：
+当前 `vectors/sm3.json` 包含 15 个测试向量：
 
 | tcId | 消息 | 来源类型 | 测试目的 |
 |---:|---|---|---|
@@ -72,6 +72,8 @@ python runner.py vectors\sm3.json
 | 6 | 63 byte 全零 | `regression` | 验证接近完整分组的输入 |
 | 7 | 64 byte 全零 | `regression` | 验证一个完整消息分组 |
 | 8 | 65 byte 全零 | `regression` | 验证跨分组输入 |
+| 9-12 | 1、31、32、33 byte 全零 | `regression` | 验证短消息和 32 byte 摘要长度附近边界 |
+| 13-15 | 127、128、129 byte 全零 | `regression` | 验证两个完整消息分组附近边界 |
 
 其中消息 `abc` 的标准测试向量为：
 
@@ -90,19 +92,12 @@ python runner.py vectors\sm3.json
 实际执行结果：
 
 ```text
-[PASS] tcId=1
-[PASS] tcId=2
-[PASS] tcId=3
-[PASS] tcId=4
-[PASS] tcId=5
-[PASS] tcId=6
-[PASS] tcId=7
-[PASS] tcId=8
+[PASS] tcId=1 ... tcId=15
 
-Total: 8, Passed: 8, Failed: 0
+Total: 15, Passed: 15, Failed: 0
 ```
 
-两个标准向量来自 `GB/T 32905-2016`。其余六个边界摘要由 OpenSSL 1.1.1i 生成，用于版本回归，并已使用 Python gmssl 3.2.2 交叉验证。全部通过说明当前 JSON 解析、边界长度、字节转换和结果比较链路能够正常工作。
+两个标准向量来自 `GB/T 32905-2016`。其余 13 个边界摘要由 OpenSSL 1.1.1i 生成，用于版本回归，并已使用 Python gmssl 3.2.2 交叉验证。全部通过说明当前 JSON 解析、边界长度、字节转换和结果比较链路能够正常工作。
 
 ## 6. 单元测试结果
 

@@ -243,14 +243,21 @@ def run_tests(
         direction = test["direction"]
         input_hex = test["pt"] if direction == "encrypt" else test["ct"]
         expected = test["ct"] if direction == "encrypt" else test["pt"]
-        actual = crypt_fn(
-            openssl,
-            test["mode"],
-            direction,
-            test["key"],
-            test["iv"],
-            bytes.fromhex(input_hex),
-        ).hex()
+        try:
+            actual = crypt_fn(
+                openssl,
+                test["mode"],
+                direction,
+                test["key"],
+                test["iv"],
+                bytes.fromhex(input_hex),
+            ).hex()
+        except Exception as error:
+            if hasattr(error, "set_test_context"):
+                error.set_test_context(
+                    test["tcId"], mode=test["mode"], direction=direction
+                )
+            raise
 
         label = (
             f"tcId={test['tcId']} mode={test['mode']} "

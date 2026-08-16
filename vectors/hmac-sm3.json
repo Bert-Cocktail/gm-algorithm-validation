@@ -13,6 +13,36 @@
           "msg": "616263",
           "msgLen": 24,
           "tag": "0933617a88d312f6f9fb4b5f200e31a64d655e92f7fa2a43f55dfeeb8ab6788d"
+        },
+        {
+          "tcId": 2,
+          "description": "HMAC-SM3 with a 1-byte zero key",
+          "sourceType": "regression",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "00",
+          "msg": "616263",
+          "msgLen": 24,
+          "tag": "36525058ca466791502435c910517f1a7e86613d5f35ac1f18a94def0eaac81f"
+        },
+        {
+          "tcId": 3,
+          "description": "HMAC-SM3 with a 64-byte zero key",
+          "sourceType": "regression",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "msg": "616263",
+          "msgLen": 24,
+          "tag": "36525058ca466791502435c910517f1a7e86613d5f35ac1f18a94def0eaac81f"
+        },
+        {
+          "tcId": 4,
+          "description": "HMAC-SM3 with a 65-byte zero key",
+          "sourceType": "regression",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "key": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "msg": "616263",
+          "msgLen": 24,
+          "tag": "64785b1dc15593a0571fe2e328f04bc32518092851b0391580dcd656e3460e53"
         }
       ]
     }

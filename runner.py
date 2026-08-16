@@ -38,6 +38,42 @@ class RunnerError(Exception):
 class CrossBackendMismatch(Exception):
     """Raised when OpenSSL and GmSSL return different results."""
 
+    def __init__(self, operation: str, openssl_result: Any, gmssl_result: Any):
+        self.operation = operation
+        self.openssl_result = self._display(openssl_result)
+        self.gmssl_result = self._display(gmssl_result)
+        self.tc_id: int | None = None
+        self.context: dict[str, Any] = {}
+        super().__init__(operation)
+
+    @staticmethod
+    def _display(value: Any) -> str:
+        return value.hex() if isinstance(value, bytes) else str(value)
+
+    def set_test_context(self, tc_id: int, **context: Any) -> None:
+        self.tc_id = tc_id
+        self.context = context
+
+    def as_error_detail(self) -> dict[str, Any]:
+        detail: dict[str, Any] = {
+            "type": "backend_mismatch",
+            "message": str(self),
+            "operation": self.operation,
+            "openssl": self.openssl_result,
+            "gmssl": self.gmssl_result,
+        }
+        if self.tc_id is not None:
+            detail["tcId"] = self.tc_id
+        detail.update(self.context)
+        return detail
+
+    def __str__(self) -> str:
+        prefix = f"tcId={self.tc_id}: " if self.tc_id is not None else ""
+        return (
+            f"{prefix}{self.operation}: OpenSSL={self.openssl_result}, "
+            f"GmSSL={self.gmssl_result}"
+        )
+
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -80,13 +116,7 @@ def _load_gmssl_backend() -> Any:
 
 def _compare_backend_results(operation: str, openssl_result: Any, gmssl_result: Any) -> Any:
     if openssl_result != gmssl_result:
-        def display(value: Any) -> str:
-            return value.hex() if isinstance(value, bytes) else str(value)
-
-        raise CrossBackendMismatch(
-            f"{operation}: OpenSSL={display(openssl_result)}, "
-            f"GmSSL={display(gmssl_result)}"
-        )
+        raise CrossBackendMismatch(operation, openssl_result, gmssl_result)
     return openssl_result
 
 
@@ -353,7 +383,11 @@ def run_tests(
 
     for test in tests:
         tc_id = test["tcId"]
-        actual = digest_fn(openssl, bytes.fromhex(test["msg"]))
+        try:
+            actual = digest_fn(openssl, bytes.fromhex(test["msg"]))
+        except CrossBackendMismatch as error:
+            error.set_test_context(tc_id)
+            raise
         expected = test["md"]
 
         matches = actual == expected
@@ -468,7 +502,7 @@ def _build_report(
     algorithm: str | None,
     tests: list[dict[str, Any]],
     exit_code: int,
-    error: dict[str, str] | None,
+    error: dict[str, Any] | None,
 ) -> dict[str, Any]:
     report: dict[str, Any] = {
         "schemaVersion": 1,
@@ -501,7 +535,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     test_results: list[dict[str, Any]] = []
     algorithm: str | None = None
-    error_detail: dict[str, str] | None = None
+    error_detail: dict[str, Any] | None = None
     result_path_is_vector = (
         args.result_json is not None
         and args.result_json.resolve() == args.vector_file.resolve()
@@ -519,7 +553,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except CrossBackendMismatch as error:
         print(f"[FAIL] backend mismatch: {error}", file=sys.stderr)
         exit_code = EXIT_TEST_FAILURE
-        error_detail = {"type": "backend_mismatch", "message": str(error)}
+        error_detail = error.as_error_detail()
     except (
         RunnerError,
         authenticated_sm4.FormatError,

@@ -15,6 +15,66 @@
           "pt": "616263",
           "ct": "67faff",
           "tag": "3c08e5f08855380ee0fbabd47aed4dbae5db19ebbe7b001a42fa8c69aaf97ade"
+        },
+        {
+          "tcId": 2,
+          "description": "Authenticate an empty plaintext",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "sm4Key": "0123456789abcdeffedcba9876543210",
+          "hmacKey": "0000000000000000000000000000000000000000000000000000000000000000",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "",
+          "ct": "",
+          "tag": "4b0f201e46ce5b3e2c2fde15d1d5855457d0a58cad2e42b4974782151f480f88"
+        },
+        {
+          "tcId": 3,
+          "description": "Encrypt and authenticate a 1-byte plaintext",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "sm4Key": "0123456789abcdeffedcba9876543210",
+          "hmacKey": "0000000000000000000000000000000000000000000000000000000000000000",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "00",
+          "ct": "06",
+          "tag": "86497dc25ca9ab006578ff133dc02c7666761d54ab17f0d683d1a644e8e433a0"
+        },
+        {
+          "tcId": 4,
+          "description": "Encrypt and authenticate a 16-byte plaintext",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "sm4Key": "0123456789abcdeffedcba9876543210",
+          "hmacKey": "0000000000000000000000000000000000000000000000000000000000000000",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f",
+          "ct": "06999e6239a36eaa2284fd89eda5f765",
+          "tag": "3e836e9b7189df8b5c96720d39e6c1e1198881deba13f7c9fef580f8603989f9"
+        },
+        {
+          "tcId": 5,
+          "description": "Encrypt and authenticate a 17-byte plaintext",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "sm4Key": "0123456789abcdeffedcba9876543210",
+          "hmacKey": "0000000000000000000000000000000000000000000000000000000000000000",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f10",
+          "ct": "06999e6239a36eaa2284fd89eda5f7657f",
+          "tag": "7a11d868b9b2cd8f12be11e0b462b66832bd5f1baba84a8f01215fdccb2841f5"
+        },
+        {
+          "tcId": 6,
+          "description": "Encrypt and authenticate a 33-byte plaintext",
+          "sourceType": "experiment",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "sm4Key": "0123456789abcdeffedcba9876543210",
+          "hmacKey": "0000000000000000000000000000000000000000000000000000000000000000",
+          "iv": "000102030405060708090a0b0c0d0e0f",
+          "pt": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+          "ct": "06999e6239a36eaa2284fd89eda5f7657f161f5854b6ea16c28809fe9d1db3053c",
+          "tag": "d7285bc37f209461e3f67d2e25c7baacd4b877968acbbef74ea70d2c5ca7e750"
         }
       ]
     }

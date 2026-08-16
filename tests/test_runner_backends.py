@@ -62,9 +62,16 @@ class TestSelectableBackends(unittest.TestCase):
         self.assertEqual(result, runner.EXIT_INPUT_ERROR)
 
     def test_cross_backend_mismatch_returns_test_failure(self) -> None:
+        errors = io.StringIO()
         with patch("gmssl_backend.gmssl_sm3", return_value="00" * 32):
-            result = self.run_vector("sm3.json", "cross")
+            with redirect_stdout(io.StringIO()), redirect_stderr(errors):
+                result = runner.main(
+                    [str(PROJECT_ROOT / "vectors" / "sm3.json"), "--backend", "cross"]
+                )
         self.assertEqual(result, runner.EXIT_TEST_FAILURE)
+        self.assertIn("tcId=1", errors.getvalue())
+        self.assertIn("OpenSSL=66c7", errors.getvalue())
+        self.assertIn("GmSSL=0000", errors.getvalue())
 
 
 if __name__ == "__main__":

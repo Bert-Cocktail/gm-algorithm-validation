@@ -8,16 +8,17 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 import runner
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VECTOR_FILES = {
-    "sm3.json": ("SM3", 8),
-    "hmac-sm3.json": ("HMAC-SM3", 1),
-    "sm4.json": ("SM4", 10),
-    "sm4-ctr-hmac-sm3.json": ("SM4-CTR-HMAC-SM3", 1),
+    "sm3.json": ("SM3", 15),
+    "hmac-sm3.json": ("HMAC-SM3", 4),
+    "sm4.json": ("SM4", 28),
+    "sm4-ctr-hmac-sm3.json": ("SM4-CTR-HMAC-SM3", 6),
 }
 
 
@@ -132,6 +133,28 @@ class TestStructuredResults(unittest.TestCase):
 
         self.assertEqual(exit_code, runner.EXIT_SUCCESS)
         self.assertEqual(report["backend"], "gmssl")
+
+    def test_backend_mismatch_report_identifies_test_and_results(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            result_path = Path(directory_name) / "mismatch.json"
+            with patch("gmssl_backend.gmssl_sm3", return_value="00" * 32):
+                exit_code = self.run_quietly(
+                    [
+                        str(PROJECT_ROOT / "vectors" / "sm3.json"),
+                        "--backend", "cross",
+                        "--result-json", str(result_path),
+                    ]
+                )
+            report = json.loads(result_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, runner.EXIT_TEST_FAILURE)
+        self.assertEqual(report["status"], "failed")
+        self.assertIsNone(report["summary"])
+        self.assertEqual(report["error"]["type"], "backend_mismatch")
+        self.assertEqual(report["error"]["tcId"], 1)
+        self.assertEqual(report["error"]["operation"], "SM3")
+        self.assertTrue(report["error"]["openssl"].startswith("66c7"))
+        self.assertEqual(report["error"]["gmssl"], "00" * 32)
 
 
 if __name__ == "__main__":

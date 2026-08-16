@@ -75,6 +75,69 @@
           "msg": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
           "msgLen": 520,
           "md": "b1f76e2d1d41d6f1bb3b09c09b8219dafbad700df2482220c892be41445a22ff"
+        },
+        {
+          "tcId": 9,
+          "description": "SM3 digest of 1 zero byte",
+          "sourceType": "regression",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "msg": "00",
+          "msgLen": 8,
+          "md": "2daef60e7a0b8f5e024c81cd2ab3109f2b4f155cf83adeb2ae5532f74a157fdf"
+        },
+        {
+          "tcId": 10,
+          "description": "SM3 digest of 31 zero bytes",
+          "sourceType": "regression",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "msg": "00000000000000000000000000000000000000000000000000000000000000",
+          "msgLen": 248,
+          "md": "12191839e99163c211a0fc051485e3a34443758529d38e93c6b7926b82f26d89"
+        },
+        {
+          "tcId": 11,
+          "description": "SM3 digest of 32 zero bytes",
+          "sourceType": "regression",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "msg": "0000000000000000000000000000000000000000000000000000000000000000",
+          "msgLen": 256,
+          "md": "e0bab8f4d8172ba245190d13c94117e93b82166c25b2b69883350c192c905140"
+        },
+        {
+          "tcId": 12,
+          "description": "SM3 digest of 33 zero bytes",
+          "sourceType": "regression",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "msg": "000000000000000000000000000000000000000000000000000000000000000000",
+          "msgLen": 264,
+          "md": "8fa0dd2c798c5bbada415e5d1167a37072ee65558a2cea408bc5214c9fd28f3c"
+        },
+        {
+          "tcId": 13,
+          "description": "SM3 digest of 127 zero bytes",
+          "sourceType": "regression",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "msg": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "msgLen": 1016,
+          "md": "3eebc6284a2eb0cda9a5e8ce109850b51b484fc564b279f81cdde72c66738db4"
+        },
+        {
+          "tcId": 14,
+          "description": "SM3 digest of 128 zero bytes",
+          "sourceType": "regression",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "msg": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "msgLen": 1024,
+          "md": "0e7fb6bc42365ae2f5c9193317a938da84419950ca246be903511b75eb3f6726"
+        },
+        {
+          "tcId": 15,
+          "description": "SM3 digest of 129 zero bytes",
+          "sourceType": "regression",
+          "source": "Generated with OpenSSL 1.1.1i and cross-checked with Python gmssl 3.2.2",
+          "msg": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "msgLen": 1032,
+          "md": "a965e9a04931e8772929698dc6b3012e245f3c36cd3efbdf32dfde65d86a3fa0"
         }
       ]
     }
