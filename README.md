@@ -170,7 +170,7 @@ openssl list -cipher-algorithms | Select-String SM4
 进入仓库：
 
 ```powershell
-cd C:\Users\16256\Documents\密码学\gm-algorithm-validation
+cd C:\path\to\gm-algorithm-validation
 ```
 
 普通用户可以直接计算 SM3：

@@ -189,7 +189,7 @@ SM4-CTR
 打开 PowerShell 并进入项目：
 
 ```powershell
-cd C:\Users\16256\Documents\密码学\gm-algorithm-validation
+cd C:\path\to\gm-algorithm-validation
 ```
 
 查看帮助：
