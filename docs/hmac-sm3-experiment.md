@@ -92,7 +92,7 @@ python runner.py vectors\hmac-sm3.json
 全仓库测试结果：
 
 ```text
-Ran 101 tests in ...
+Ran 106 tests in ...
 
 OK
 ```

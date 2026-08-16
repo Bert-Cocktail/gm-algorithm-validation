@@ -70,10 +70,18 @@ OK
 全项目测试结果：
 
 ```text
-Ran 101 tests in ...
+Ran 106 tests in ...
 
 OK
 ```
+
+交叉验证结果可以保存为结构化 JSON：
+
+```powershell
+python runner.py vectors\sm4.json --backend cross --result-json results\sm4-cross.json
+```
+
+报告记录所选后端、逐用例状态、expected/actual、汇总和退出码。若两套后端产生不同结果，报告状态为 `failed`，并写入 `error.type: "backend_mismatch"`。
 
 ## 当前边界
 

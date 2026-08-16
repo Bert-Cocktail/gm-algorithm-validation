@@ -47,6 +47,7 @@
 - 使用 GmSSL 原始 SM4 分组接口组合无 padding ECB、CBC 和 CTR
 - `runner.py` 支持 `openssl`、`gmssl` 和 `cross` 三种后端
 - `cross` 会逐项比较 OpenSSL 与 GmSSL，任何不一致都返回测试失败
+- 统一入口可使用 `--result-json` 输出便于归档和程序分析的结构化报告
 
 两个执行器都会输出每个测试用例的 PASS/FAIL，并区分测试失败与输入、环境错误。
 
@@ -243,6 +244,14 @@ python runner.py vectors\sm3.json --backend gmssl
 python runner.py vectors\sm3.json --backend cross
 ```
 
+同时保存结构化测试结果：
+
+```powershell
+python runner.py vectors\sm3.json --backend cross --result-json results\sm3-cross.json
+```
+
+终端仍显示原有 PASS/FAIL；结果文件记录算法、后端、退出码、汇总以及每个 `tcId` 的 expected/actual。输入错误和后端不一致也会生成带 `error` 字段的报告。结果文件采用同目录临时文件原子写入，并拒绝覆盖输入向量文件。
+
 - `openssl`：默认后端，只运行 OpenSSL。
 - `gmssl`：只运行 Python gmssl，不要求 OpenSSL 在 `PATH`。
 - `cross`：两套后端都运行，并要求每次密码运算结果一致。
@@ -272,7 +281,7 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 101 项测试：
+当前共有 106 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -285,11 +294,12 @@ python -m unittest discover -s tests -v
 - 6 项认证 SM4 向量执行器测试
 - 7 项 OpenSSL/GmSSL 交叉验证测试
 - 5 项 runner 后端选择测试
+- 5 项结构化结果文件测试
 
 本次实测结果：
 
 ```text
-Ran 101 tests in ...
+Ran 106 tests in ...
 
 OK
 ```

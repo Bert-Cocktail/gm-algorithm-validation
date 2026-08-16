@@ -122,11 +122,22 @@ def run_tests(
     *,
     hmac_fn: HmacFunction = hmac_sm3,
     output: TextIO = sys.stdout,
+    results: list[dict[str, Any]] | None = None,
 ) -> int:
     passed = 0
     for test in tests:
         actual = hmac_fn(openssl, test["key"], bytes.fromhex(test["msg"]))
-        if actual == test["tag"]:
+        matches = actual == test["tag"]
+        if results is not None:
+            results.append(
+                {
+                    "tcId": test["tcId"],
+                    "status": "passed" if matches else "failed",
+                    "expected": test["tag"],
+                    "actual": actual,
+                }
+            )
+        if matches:
             passed += 1
             print(f"[PASS] tcId={test['tcId']}", file=output)
         else:

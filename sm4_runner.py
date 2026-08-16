@@ -235,6 +235,7 @@ def run_tests(
     *,
     crypt_fn: CryptFunction = sm4_crypt,
     output: TextIO = sys.stdout,
+    results: list[dict[str, Any]] | None = None,
 ) -> int:
     passed = 0
 
@@ -255,7 +256,19 @@ def run_tests(
             f"tcId={test['tcId']} mode={test['mode']} "
             f"direction={direction}"
         )
-        if actual == expected:
+        matches = actual == expected
+        if results is not None:
+            results.append(
+                {
+                    "tcId": test["tcId"],
+                    "mode": test["mode"],
+                    "direction": direction,
+                    "status": "passed" if matches else "failed",
+                    "expected": expected,
+                    "actual": actual,
+                }
+            )
+        if matches:
             passed += 1
             print(f"[PASS] {label}", file=output)
         else:

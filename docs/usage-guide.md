@@ -201,7 +201,7 @@ python runner.py --help
 统一命令格式：
 
 ```powershell
-python runner.py <测试向量文件> [--backend openssl|gmssl|cross] [--openssl <openssl.exe路径>]
+python runner.py <测试向量文件> [--backend openssl|gmssl|cross] [--openssl <openssl.exe路径>] [--result-json <结果文件>]
 ```
 
 后端说明：
@@ -213,6 +213,14 @@ python runner.py <测试向量文件> [--backend openssl|gmssl|cross] [--openssl
 | `cross` | 同时运行两套后端并逐项比较 |
 
 `gmssl` 和 `cross` 需要先安装 `requirements-dev.txt`。`--openssl` 只对 `openssl` 和 `cross` 有效。
+
+保存结构化结果文件：
+
+```powershell
+python runner.py vectors\sm3.json --backend cross --result-json results\sm3-cross.json
+```
+
+该选项不改变终端 PASS/FAIL 输出或退出码。结果 JSON 使用 UTF-8 和原子替换写入；已有结果文件会更新，但程序拒绝让结果路径与输入向量路径相同。
 
 普通用户计算 SM3 时使用：
 
@@ -488,7 +496,34 @@ python runner.py vectors\sm4.json --openssl "C:\完整路径\openssl.exe"
 
 ## 9. 程序输出和退出码
 
-### 9.1 全部通过
+### 9.1 结构化结果 JSON
+
+成功报告示例：
+
+```json
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-16T08:00:00Z",
+  "vectorFile": "C:\\...\\vectors\\sm3.json",
+  "algorithm": "SM3",
+  "backend": "cross",
+  "status": "passed",
+  "exitCode": 0,
+  "summary": {"total": 8, "passed": 8, "failed": 0},
+  "tests": [
+    {
+      "tcId": 1,
+      "status": "passed",
+      "expected": "66c7...a8e0",
+      "actual": "66c7...a8e0"
+    }
+  ]
+}
+```
+
+`status` 为 `passed`、`failed` 或 `error`。普通测试不一致时，每项结果保留 expected/actual；SM4 额外记录 `mode` 和 `direction`；认证组合分别记录密文、tag 和恢复明文。输入无效时 `summary` 为 `null`，并增加 `error.type` 与 `error.message`。交叉后端不一致使用 `error.type: "backend_mismatch"`。
+
+### 9.2 全部通过
 
 ```text
 [PASS] tcId=1
@@ -502,7 +537,7 @@ Total: N, Passed: N, Failed: 0
 0
 ```
 
-### 9.2 计算结果不一致
+### 9.3 计算结果不一致
 
 ```text
 [FAIL] tcId=1
@@ -516,7 +551,7 @@ Total: N, Passed: N, Failed: 0
 1
 ```
 
-### 9.3 输入或环境错误
+### 9.4 输入或环境错误
 
 例如算法名称错误、JSON 损坏、密钥长度错误或找不到 OpenSSL：
 
@@ -544,7 +579,7 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 101 项测试：
+当前共有 106 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -557,11 +592,12 @@ python -m unittest discover -s tests -v
 - 6 项认证 SM4 向量执行器测试
 - 7 项 OpenSSL/GmSSL 交叉验证测试
 - 5 项 runner 后端选择测试
+- 5 项结构化结果文件测试
 
 当前预期结果：
 
 ```text
-Ran 101 tests in ...
+Ran 106 tests in ...
 
 OK
 ```
@@ -595,6 +631,7 @@ python -m unittest tests.test_runner_dispatch -v
 - 根据 `algorithm` 分派算法
 - 实现 SM3 输入校验与 OpenSSL 调用
 - 统一处理错误和退出码
+- 可选收集逐用例结果并原子写入结构化 JSON 报告
 
 主要函数：
 
@@ -606,6 +643,8 @@ python -m unittest tests.test_runner_dispatch -v
 | `sm3_digest()` | 调用 OpenSSL 计算 SM3 |
 | `run_tests()` | 执行 SM3 测试并汇总结果 |
 | `run_document()` | 根据算法名称分派 SM3、HMAC-SM3、SM4 或认证 SM4 |
+| `_build_report()` | 构造统一的结果报告对象 |
+| `_write_json_atomic()` | 原子写入 UTF-8 JSON 结果文件 |
 | `main()` | 统一程序入口和错误处理 |
 
 ### 11.2 `gmcrypto.py`
@@ -786,7 +825,7 @@ git commit -m "描述本次修改"
 1. 提取 SM3、SM4 公共的 JSON、OpenSSL 和错误处理模块。
 2. 使用 OpenSSL EVP API 编写 C 语言后端。
 3. 使用同一批向量交叉验证 Python 和 C 后端。
-4. 为后端不一致报告增加更细的用例编号和结构化结果输出。
+4. 为交叉后端不一致报告补充正在执行的 `tcId` 和两套后端的独立结果。
 5. 为 HMAC-SM3 增加独立标准向量，并逐步将其 CLI 也迁移到密钥文件。
 6. 研究流式大文件处理、操作系统密钥库和标准化认证加密容器。
 7. 增加 SM2 密钥生成、签名、验签和加解密实验。

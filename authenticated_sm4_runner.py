@@ -108,6 +108,7 @@ def run_tests(
     encrypt_fn: EncryptFunction = authenticated_sm4.encrypt_and_authenticate,
     decrypt_fn: DecryptFunction = authenticated_sm4.verify_and_decrypt,
     output: TextIO = sys.stdout,
+    results: list[dict[str, Any]] | None = None,
 ) -> int:
     passed = 0
     for test in tests:
@@ -127,6 +128,23 @@ def run_tests(
             and actual_package["tag"] == test["tag"]
             and actual_pt == test["pt"]
         )
+        if results is not None:
+            results.append(
+                {
+                    "tcId": test["tcId"],
+                    "status": "passed" if matches else "failed",
+                    "expected": {
+                        "ciphertext": test["ct"],
+                        "tag": test["tag"],
+                        "plaintext": test["pt"],
+                    },
+                    "actual": {
+                        "ciphertext": actual_package["ciphertext"],
+                        "tag": actual_package["tag"],
+                        "plaintext": actual_pt,
+                    },
+                }
+            )
         if matches:
             passed += 1
             print(f"[PASS] tcId={test['tcId']} algorithm={authenticated_sm4.ALGORITHM}", file=output)

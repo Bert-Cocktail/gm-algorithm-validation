@@ -146,7 +146,7 @@ python -m unittest tests.test_authenticated_sm4 -v
 全量测试结果：
 
 ```text
-Ran 101 tests in ...
+Ran 106 tests in ...
 
 OK
 ```

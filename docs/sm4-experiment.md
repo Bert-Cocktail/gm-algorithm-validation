@@ -213,7 +213,7 @@ python -m unittest discover -s tests -v
 本次实测结果：
 
 ```text
-Ran 101 tests in ...
+Ran 106 tests in ...
 
 OK
 ```

@@ -10,7 +10,10 @@ import re
 import shutil
 import subprocess
 import sys
+import os
+import tempfile
 from collections.abc import Callable, Sequence
+from datetime import datetime, timezone
 from io import TextIOBase
 from pathlib import Path
 from typing import Any
@@ -56,6 +59,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--openssl",
         default="openssl",
         help="OpenSSL executable name or path (default: openssl)",
+    )
+    parser.add_argument(
+        "--result-json",
+        type=Path,
+        help="write a structured JSON test report to this path",
     )
     return parser.parse_args(argv)
 
@@ -339,6 +347,7 @@ def run_tests(
     *,
     digest_fn: Callable[[str, bytes], str] = sm3_digest,
     output: TextIOBase = sys.stdout,
+    results: list[dict[str, Any]] | None = None,
 ) -> int:
     passed = 0
 
@@ -347,7 +356,18 @@ def run_tests(
         actual = digest_fn(openssl, bytes.fromhex(test["msg"]))
         expected = test["md"]
 
-        if actual == expected:
+        matches = actual == expected
+        if results is not None:
+            results.append(
+                {
+                    "tcId": tc_id,
+                    "status": "passed" if matches else "failed",
+                    "expected": expected,
+                    "actual": actual,
+                }
+            )
+
+        if matches:
             passed += 1
             print(f"[PASS] tcId={tc_id}", file=output)
         else:
@@ -364,7 +384,11 @@ def run_tests(
 
 
 def run_document(
-    document: dict[str, Any], openssl: str, *, backend: str = "openssl"
+    document: dict[str, Any],
+    openssl: str,
+    *,
+    backend: str = "openssl",
+    results: list[dict[str, Any]] | None = None,
 ) -> int:
     algorithm = str(document.get("algorithm", "")).upper()
 
@@ -375,6 +399,7 @@ def run_document(
             extract_tests(document),
             openssl,
             digest_fn=_digest_function(backend),
+            results=results,
         )
 
     if algorithm == "SM4":
@@ -384,6 +409,7 @@ def run_document(
             sm4_runner.extract_tests(document),
             openssl,
             crypt_fn=_crypt_function(backend),
+            results=results,
         )
 
     if algorithm == "HMAC-SM3":
@@ -391,6 +417,7 @@ def run_document(
             hmac_sm3_runner.extract_tests(document),
             openssl,
             hmac_fn=_hmac_function(backend),
+            results=results,
         )
 
     if algorithm == "SM4-CTR-HMAC-SM3":
@@ -400,6 +427,7 @@ def run_document(
             openssl,
             encrypt_fn=encrypt_fn,
             decrypt_fn=decrypt_fn,
+            results=results,
         )
 
     name = algorithm or "<missing>"
@@ -409,15 +437,89 @@ def run_document(
     )
 
 
+def _write_json_atomic(path: Path, document: dict[str, Any]) -> None:
+    if not path.parent.exists() or not path.parent.is_dir():
+        raise RunnerError(f"result directory not found: {path.parent}")
+    encoded = (json.dumps(document, indent=2, ensure_ascii=False) + "\n").encode(
+        "utf-8"
+    )
+    temporary: Path | None = None
+    try:
+        descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        temporary = Path(name)
+        with os.fdopen(descriptor, "wb") as result_file:
+            result_file.write(encoded)
+            result_file.flush()
+            os.fsync(result_file.fileno())
+        os.replace(temporary, path)
+        temporary = None
+    except OSError as error:
+        raise RunnerError(f"failed to write result JSON: {error}") from error
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _build_report(
+    args: argparse.Namespace,
+    algorithm: str | None,
+    tests: list[dict[str, Any]],
+    exit_code: int,
+    error: dict[str, str] | None,
+) -> dict[str, Any]:
+    report: dict[str, Any] = {
+        "schemaVersion": 1,
+        "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "vectorFile": str(args.vector_file.resolve()),
+        "algorithm": algorithm,
+        "backend": args.backend,
+        "status": (
+            "passed" if exit_code == EXIT_SUCCESS
+            else "failed" if exit_code == EXIT_TEST_FAILURE
+            else "error"
+        ),
+        "exitCode": exit_code,
+        "summary": None,
+        "tests": tests,
+    }
+    if exit_code in (EXIT_SUCCESS, EXIT_TEST_FAILURE) and error is None:
+        passed = sum(test["status"] == "passed" for test in tests)
+        report["summary"] = {
+            "total": len(tests),
+            "passed": passed,
+            "failed": len(tests) - passed,
+        }
+    if error is not None:
+        report["error"] = error
+    return report
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    test_results: list[dict[str, Any]] = []
+    algorithm: str | None = None
+    error_detail: dict[str, str] | None = None
+    result_path_is_vector = (
+        args.result_json is not None
+        and args.result_json.resolve() == args.vector_file.resolve()
+    )
     try:
+        if result_path_is_vector:
+            raise RunnerError("result JSON path must not overwrite the vector file")
         document = load_document(args.vector_file)
+        raw_algorithm = document.get("algorithm")
+        algorithm = str(raw_algorithm).upper() if raw_algorithm is not None else None
         openssl = resolve_openssl(args.openssl) if args.backend != "gmssl" else ""
-        return run_document(document, openssl, backend=args.backend)
+        exit_code = run_document(
+            document, openssl, backend=args.backend, results=test_results
+        )
     except CrossBackendMismatch as error:
         print(f"[FAIL] backend mismatch: {error}", file=sys.stderr)
-        return EXIT_TEST_FAILURE
+        exit_code = EXIT_TEST_FAILURE
+        error_detail = {"type": "backend_mismatch", "message": str(error)}
     except (
         RunnerError,
         authenticated_sm4.FormatError,
@@ -427,7 +529,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         sm4_runner.RunnerError,
     ) as error:
         print(f"Error: {error}", file=sys.stderr)
-        return EXIT_INPUT_ERROR
+        exit_code = EXIT_INPUT_ERROR
+        error_detail = {"type": "input_error", "message": str(error)}
+
+    if args.result_json is not None and not result_path_is_vector:
+        report = _build_report(
+            args, algorithm, test_results, exit_code, error_detail
+        )
+        try:
+            _write_json_atomic(args.result_json, report)
+        except RunnerError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return EXIT_INPUT_ERROR
+    return exit_code
 
 
 if __name__ == "__main__":
