@@ -13,12 +13,22 @@
 
 测试中的固定密钥是公开实验数据。实际密钥应由安全随机源生成，不得写入仓库，也不能把同一把密钥同时用于加密和认证。
 
-生成随机实验密钥的命令：
+普通用户通过 `gmcrypto.py` 生成包含两把随机密钥的文件：
 
 ```powershell
-openssl rand -hex 16
-openssl rand -hex 32
+python gmcrypto.py generate-auth-key --output auth-key.json
 ```
+
+密钥文件格式为：
+
+```json
+{
+  "sm4Key": "32 个十六进制字符",
+  "hmacKey": "64 个十六进制字符"
+}
+```
+
+认证加密命令只接受 `--key-file`，密钥不会进入命令历史或进程参数。密钥文件仍是敏感明文，应保存在仓库外并限制文件访问。
 
 ## 数据包格式
 
@@ -61,6 +71,15 @@ ASCII("GMENC")
 - `verify_and_decrypt()`：恒定时间比较 tag，成功后才使用 SM4-CTR 解密。
 
 组合向量执行器位于 `authenticated_sm4_runner.py`。统一 `runner.py` 根据根字段 `algorithm: "SM4-CTR-HMAC-SM3"` 分派到该模块，同时检查预期密文、tag 和解密恢复明文。
+
+普通用户入口位于 `gmcrypto.py`：
+
+```powershell
+python gmcrypto.py encrypt-auth --key-file auth-key.json --file input.bin --output package.json
+python gmcrypto.py decrypt-auth --key-file auth-key.json --package package.json --output recovered.bin
+```
+
+加密也支持 `--text` 和 `--hex`。输出文件默认不得已存在，使用者明确传入 `--force` 才允许替换。写入通过同目录临时文件完成；解密会在认证完全成功后才创建最终明文文件。
 
 ## 加密认证流程
 
@@ -122,12 +141,12 @@ Total: 1, Passed: 1, Failed: 0
 python -m unittest tests.test_authenticated_sm4 -v
 ```
 
-当前共有 21 项认证 SM4 核心测试和 6 项组合向量执行器测试，覆盖密钥长度、格式编码、固定向量、空消息、非整分组消息、随机 IV、往返解密、向量校验，以及 IV、密文、tag 和密钥篡改。
+当前共有 21 项认证 SM4 核心测试、6 项组合向量执行器测试和 6 项普通用户认证加密 CLI 测试，覆盖密钥长度、格式编码、固定向量、空消息、非整分组消息、随机 IV、文件往返、覆盖保护，以及 IV、密文、tag 和密钥篡改。CLI 测试还确认认证失败时不会产生明文输出。
 
 全量测试结果：
 
 ```text
-Ran 95 tests in ...
+Ran 101 tests in ...
 
 OK
 ```
@@ -142,3 +161,5 @@ OK
 - 合法格式下的 tag 不匹配统一报告为 `authentication failed`，并且认证失败时不解密。不支持的版本、算法或非法字段长度作为格式错误提前拒绝。
 
 当前格式是学习实验格式，没有经过标准化、互操作验证或安全审计，不能直接作为生产协议使用。
+
+当前文件接口限制输入为 64 MiB，并会把文件内容完整读入内存；密钥文件也不是操作系统密钥库。后续可继续研究流式处理、密钥权限检查和标准化容器格式。

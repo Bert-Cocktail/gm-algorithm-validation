@@ -5,19 +5,25 @@ from __future__ import annotations
 
 import argparse
 import hmac
+import json
+import os
+import secrets
 import subprocess
 import sys
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO
 
 import runner
+import authenticated_sm4
 import hmac_sm3_runner
 
 
 EXIT_SUCCESS = 0
 EXIT_VERIFY_FAILURE = 1
 EXIT_INPUT_ERROR = 2
+MAX_FILE_BYTES = 64 * 1024 * 1024
 
 
 class UserInputError(Exception):
@@ -75,6 +81,38 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="openssl",
         help="OpenSSL executable name or path (default: openssl)",
     )
+
+    keygen_parser = commands.add_parser(
+        "generate-auth-key", help="generate an SM4/HMAC key file"
+    )
+    keygen_parser.add_argument("--output", type=Path, required=True)
+    keygen_parser.add_argument(
+        "--force", action="store_true", help="replace an existing output file"
+    )
+
+    encrypt_parser = commands.add_parser(
+        "encrypt-auth", help="encrypt and authenticate data"
+    )
+    encrypt_source = encrypt_parser.add_mutually_exclusive_group(required=True)
+    encrypt_source.add_argument("--text", help="text to encode and encrypt")
+    encrypt_source.add_argument(
+        "--hex", dest="hex_message", help="plaintext bytes in hexadecimal"
+    )
+    encrypt_source.add_argument("--file", type=Path, help="plaintext input file")
+    encrypt_parser.add_argument("--key-file", type=Path, required=True)
+    encrypt_parser.add_argument("--output", type=Path, required=True)
+    encrypt_parser.add_argument("--encoding", default="utf-8")
+    encrypt_parser.add_argument("--force", action="store_true")
+    encrypt_parser.add_argument("--openssl", default="openssl")
+
+    decrypt_parser = commands.add_parser(
+        "decrypt-auth", help="authenticate and decrypt a package"
+    )
+    decrypt_parser.add_argument("--package", type=Path, required=True)
+    decrypt_parser.add_argument("--key-file", type=Path, required=True)
+    decrypt_parser.add_argument("--output", type=Path, required=True)
+    decrypt_parser.add_argument("--force", action="store_true")
+    decrypt_parser.add_argument("--openssl", default="openssl")
     return parser.parse_args(argv)
 
 
@@ -164,6 +202,125 @@ def message_bytes_from_args(args: argparse.Namespace) -> bytes:
     raise UserInputError("this operation requires text or hexadecimal message input")
 
 
+def read_limited_file(path: Path, description: str) -> bytes:
+    if not path.exists():
+        raise UserInputError(f"{description} not found: {path}")
+    if not path.is_file():
+        raise UserInputError(f"{description} is not a regular file: {path}")
+    try:
+        size = path.stat().st_size
+        if size > MAX_FILE_BYTES:
+            raise UserInputError(
+                f"{description} exceeds the {MAX_FILE_BYTES // (1024 * 1024)} MiB limit"
+            )
+        return path.read_bytes()
+    except OSError as error:
+        raise UserInputError(f"failed to read {description}: {error}") from error
+
+
+def load_json_object(path: Path, description: str) -> dict[str, object]:
+    raw = read_limited_file(path, description)
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise UserInputError(f"{description} must be valid UTF-8 JSON: {error}") from error
+    if not isinstance(value, dict):
+        raise UserInputError(f"{description} must contain a JSON object")
+    return value
+
+
+def load_auth_keys(path: Path) -> tuple[str, str]:
+    document = load_json_object(path, "key file")
+    if set(document) != {"sm4Key", "hmacKey"}:
+        raise UserInputError(
+            "key file must contain exactly the 'sm4Key' and 'hmacKey' fields"
+        )
+    try:
+        return authenticated_sm4.validate_keys(
+            document["sm4Key"], document["hmacKey"]
+        )
+    except authenticated_sm4.FormatError as error:
+        raise UserInputError(f"invalid key file: {error}") from error
+
+
+def write_atomic(path: Path, data: bytes, *, force: bool) -> None:
+    parent = path.parent
+    if not parent.exists() or not parent.is_dir():
+        raise UserInputError(f"output directory not found: {parent}")
+    if path.exists() and not force:
+        raise UserInputError(f"output file already exists: {path} (use --force to replace it)")
+
+    temporary: Path | None = None
+    reserved_output = False
+    try:
+        descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=parent)
+        temporary = Path(name)
+        with os.fdopen(descriptor, "wb") as output_file:
+            output_file.write(data)
+            output_file.flush()
+            os.fsync(output_file.fileno())
+        if not force:
+            reservation = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(reservation)
+            reserved_output = True
+        os.replace(temporary, path)
+        temporary = None
+        reserved_output = False
+    except FileExistsError as error:
+        raise UserInputError(
+            f"output file already exists: {path} (use --force to replace it)"
+        ) from error
+    except OSError as error:
+        raise UserInputError(f"failed to write output file: {error}") from error
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+        if reserved_output:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def run_generate_auth_key(args: argparse.Namespace) -> None:
+    document = {
+        "sm4Key": secrets.token_hex(authenticated_sm4.SM4_KEY_BYTES),
+        "hmacKey": secrets.token_hex(authenticated_sm4.HMAC_KEY_BYTES),
+    }
+    encoded = (json.dumps(document, indent=2) + "\n").encode("utf-8")
+    write_atomic(args.output, encoded, force=args.force)
+
+
+def run_encrypt_auth(args: argparse.Namespace, openssl: str) -> None:
+    sm4_key, hmac_key = load_auth_keys(args.key_file)
+    if args.file is not None:
+        if args.encoding != "utf-8":
+            raise UserInputError("--encoding can only be used together with --text")
+        plaintext = read_limited_file(args.file, "plaintext file")
+    else:
+        plaintext = message_bytes_from_args(args)
+    package = authenticated_sm4.encrypt_and_authenticate(
+        openssl, sm4_key, hmac_key, plaintext
+    )
+    encoded = (json.dumps(package, indent=2) + "\n").encode("utf-8")
+    write_atomic(args.output, encoded, force=args.force)
+
+
+def run_decrypt_auth(args: argparse.Namespace, openssl: str) -> None:
+    sm4_key, hmac_key = load_auth_keys(args.key_file)
+    package = load_json_object(args.package, "authenticated package")
+    try:
+        plaintext = authenticated_sm4.verify_and_decrypt(
+            openssl, sm4_key, hmac_key, package
+        )
+    except authenticated_sm4.FormatError as error:
+        raise UserInputError(f"invalid authenticated package: {error}") from error
+    write_atomic(args.output, plaintext, force=args.force)
+
+
 def run_hmac_sm3(args: argparse.Namespace, openssl: str) -> tuple[str, bool | None]:
     key_hex = normalize_hex(args.key_hex, "--key-hex")
     if not key_hex:
@@ -201,6 +358,10 @@ def main(
 ) -> int:
     args = parse_args(argv)
     try:
+        if args.command == "generate-auth-key":
+            run_generate_auth_key(args)
+            print(args.output, file=output)
+            return EXIT_SUCCESS
         openssl = runner.resolve_openssl(args.openssl)
         if args.command == "sm3":
             print(run_sm3(args, openssl), file=output)
@@ -212,7 +373,18 @@ def main(
                 return EXIT_SUCCESS
             print("OK" if verified else "FAIL", file=output)
             return EXIT_SUCCESS if verified else EXIT_VERIFY_FAILURE
+        if args.command == "encrypt-auth":
+            run_encrypt_auth(args, openssl)
+            print(args.output, file=output)
+            return EXIT_SUCCESS
+        if args.command == "decrypt-auth":
+            run_decrypt_auth(args, openssl)
+            print(args.output, file=output)
+            return EXIT_SUCCESS
         raise UserInputError(f"unsupported command: {args.command}")
+    except authenticated_sm4.AuthenticationError as error:
+        print(f"Error: {error}", file=error_output)
+        return EXIT_VERIFY_FAILURE
     except (UserInputError, runner.RunnerError, hmac_sm3_runner.RunnerError) as error:
         print(f"Error: {error}", file=error_output)
         return EXIT_INPUT_ERROR

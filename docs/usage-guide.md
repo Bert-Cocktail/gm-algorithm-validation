@@ -78,6 +78,8 @@ SM4 的基本参数为：
 - 对版本、算法、IV、密文长度和密文计算 HMAC-SM3
 - 使用恒定时间比较验证 tag，并且只在验证成功后解密
 - 检测 IV、密文和 tag 篡改
+- 通过 `gmcrypto.py` 生成双密钥文件并执行认证加密、认证解密
+- 认证失败时不写出明文，默认拒绝覆盖已有输出
 
 该接口是学习实验格式，不是经过标准化或安全审计的生产文件格式。
 
@@ -251,6 +253,28 @@ python gmcrypto.py hmac-sm3 --key-hex 00112233445566778899aabbccddeeff --text "a
 ```
 
 HMAC-SM3 同样支持 `--hex` 和 `--file`。生成模式输出 64 个十六进制字符；验证成功输出 `OK` 并返回 `0`，验证失败输出 `FAIL` 并返回 `1`。输入或环境错误返回 `2`。
+
+生成认证加密密钥文件：
+
+```powershell
+python gmcrypto.py generate-auth-key --output auth-key.json
+```
+
+文件中分别保存 16 byte SM4 密钥和 32 byte HMAC 密钥。认证加密命令不接受命令行明文密钥：
+
+```powershell
+python gmcrypto.py encrypt-auth --key-file auth-key.json --text "国密实验" --output message.gmenc.json
+python gmcrypto.py encrypt-auth --key-file auth-key.json --hex 616263 --output message.gmenc.json
+python gmcrypto.py encrypt-auth --key-file auth-key.json --file examples\message.txt --output message.gmenc.json
+```
+
+验证认证 tag 并解密到文件：
+
+```powershell
+python gmcrypto.py decrypt-auth --key-file auth-key.json --package message.gmenc.json --output recovered.txt
+```
+
+加密结果是包含 `version`、`algorithm`、`iv`、`ciphertext` 和 `tag` 的 JSON 包。解密先完成 HMAC 验证，认证失败返回退出码 `1` 且不产生明文文件。输入、格式和环境错误返回 `2`。输出路径默认必须不存在，需要明确替换时使用 `--force`。
 
 运行 SM4-CTR + HMAC-SM3 组合向量：
 
@@ -520,12 +544,13 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 95 项测试：
+当前共有 101 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
 - 7 项 `gmcrypto.py` 普通用户 SM3 CLI 测试
 - 8 项 HMAC-SM3 CLI 测试
+- 6 项普通用户认证加密 CLI 测试
 - 8 项 HMAC-SM3 向量执行器测试
 - 5 项统一入口分派测试
 - 21 项认证 SM4 格式、加解密与篡改测试
@@ -536,7 +561,7 @@ python -m unittest discover -s tests -v
 当前预期结果：
 
 ```text
-Ran 95 tests in ...
+Ran 101 tests in ...
 
 OK
 ```
@@ -589,6 +614,9 @@ python -m unittest tests.test_runner_dispatch -v
 
 - 为普通用户提供文本、十六进制和文件三种 SM3 输入方式
 - 生成和验证 HMAC-SM3 tag
+- 生成认证加密双密钥文件
+- 使用密钥文件完成 SM4-CTR + HMAC-SM3 认证加密与解密
+- 认证成功后才原子写出明文，并默认拒绝覆盖已有文件
 - 明确处理文本编码和十六进制错误
 - SM3 文件摘要由 OpenSSL 文件接口读取；HMAC 文件输入读取为字节后复用统一底层函数
 - 只输出摘要，便于脚本继续处理
@@ -603,6 +631,11 @@ python -m unittest tests.test_runner_dispatch -v
 | `run_sm3()` | 选择文本、十六进制或文件输入 |
 | `hmac_sm3_runner.hmac_sm3()` | 调用 OpenSSL 生成 HMAC-SM3 tag |
 | `run_hmac_sm3()` | 生成 tag 或使用恒定时间比较进行验证 |
+| `load_auth_keys()` | 读取并校验 JSON 双密钥文件 |
+| `run_generate_auth_key()` | 使用安全随机源生成双密钥文件 |
+| `run_encrypt_auth()` | 加密并输出认证 JSON 包 |
+| `run_decrypt_auth()` | 认证成功后解密并写出明文 |
+| `write_atomic()` | 使用同目录临时文件写入并提供覆盖保护 |
 | `main()` | 普通用户命令入口和错误处理 |
 
 ### 11.3 `sm4_runner.py`
@@ -716,10 +749,13 @@ abc
 - SM4-CBC 不提供完整性认证，不能单独抵抗主动篡改。
 - SM4-CTR 可处理任意长度，但不提供完整性认证；同一密钥下绝不能重复 IV/初始计数器。
 - 当前固定 IV 仅用于可重复实验，不代表生产系统应固定 IV。
-- CTR 虽然不需要 padding，当前执行器仍缺少安全文件格式、计数器管理和完整性认证，不能直接作为通用文件加密工具。
+- 普通 `SM4-CTR` 不提供完整性；`gmcrypto.py` 的实验格式额外使用 HMAC-SM3 认证，并为每次加密随机生成 IV。
 - 测试向量通过只证明所测试输入输出一致，不代表整个实现经过安全认证。
 - 不要在仓库、JSON、命令历史或测试代码中保存真实生产密钥。
 - `--key-hex` 会出现在 shell 历史和进程参数中，只适合本地学习实验。
+- `encrypt-auth` 和 `decrypt-auth` 只接受 `--key-file`。密钥文件包含明文密钥，应放在仓库外、限制访问且不得提交到 Git。
+- 认证加密输入文件和 JSON 包上限为 64 MiB，当前会完整读入内存。
+- 认证 JSON 格式未经标准化、安全审计或生产互操作验证。
 
 ## 15. 推荐日常流程
 
@@ -751,7 +787,7 @@ git commit -m "描述本次修改"
 2. 使用 OpenSSL EVP API 编写 C 语言后端。
 3. 使用同一批向量交叉验证 Python 和 C 后端。
 4. 为后端不一致报告增加更细的用例编号和结构化结果输出。
-5. 为 HMAC-SM3 增加独立标准向量和更安全的密钥输入方式。
-6. 设计带 padding 或 CTR 计数器管理、IV 序列化和完整性认证的文件加密实验。
+5. 为 HMAC-SM3 增加独立标准向量，并逐步将其 CLI 也迁移到密钥文件。
+6. 研究流式大文件处理、操作系统密钥库和标准化认证加密容器。
 7. 增加 SM2 密钥生成、签名、验签和加解密实验。
 8. 逐步适配更接近 ACVP 的 JSON 能力描述与结果格式。

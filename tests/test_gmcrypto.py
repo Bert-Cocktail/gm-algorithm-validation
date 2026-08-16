@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import shutil
 import tempfile
 import unittest
@@ -16,6 +17,8 @@ ABC_DIGEST = "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0"
 EMPTY_DIGEST = "1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b"
 HMAC_KEY = "00112233445566778899aabbccddeeff"
 ABC_HMAC = "0933617a88d312f6f9fb4b5f200e31a64d655e92f7fa2a43f55dfeeb8ab6788d"
+SM4_KEY = "0123456789abcdeffedcba9876543210"
+AUTH_HMAC_KEY = "00112233445566778899aabbccddeeff" * 2
 
 
 class TestGmcryptoSm3(unittest.TestCase):
@@ -187,6 +190,139 @@ class TestGmcryptoHmacSm3(unittest.TestCase):
 
         self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
         self.assertIn("exactly 32 bytes", errors)
+
+
+class TestGmcryptoAuthenticatedEncryption(unittest.TestCase):
+    def run_command(self, arguments: list[str]) -> tuple[int, str, str]:
+        output = io.StringIO()
+        errors = io.StringIO()
+        result = gmcrypto.main(arguments, output=output, error_output=errors)
+        return result, output.getvalue().strip(), errors.getvalue().strip()
+
+    def write_key_file(self, directory: Path) -> Path:
+        path = directory / "auth-key.json"
+        path.write_text(
+            json.dumps({"sm4Key": SM4_KEY, "hmacKey": AUTH_HMAC_KEY}),
+            encoding="utf-8",
+        )
+        return path
+
+    def test_generate_key_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            path = Path(directory_name) / "generated-key.json"
+            result, reported, errors = self.run_command(
+                ["generate-auth-key", "--output", str(path)]
+            )
+            document = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(result, gmcrypto.EXIT_SUCCESS)
+        self.assertEqual(reported, str(path))
+        self.assertEqual(errors, "")
+        self.assertEqual(len(document["sm4Key"]), 32)
+        self.assertEqual(len(document["hmacKey"]), 64)
+
+    def test_text_encrypt_and_file_decrypt_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            key_file = self.write_key_file(directory)
+            package = directory / "message.gmenc.json"
+            plaintext = directory / "message.txt"
+
+            encrypted, _, encrypt_errors = self.run_command(
+                [
+                    "encrypt-auth", "--key-file", str(key_file),
+                    "--text", "国密实验", "--output", str(package),
+                ]
+            )
+            decrypted, _, decrypt_errors = self.run_command(
+                [
+                    "decrypt-auth", "--key-file", str(key_file),
+                    "--package", str(package), "--output", str(plaintext),
+                ]
+            )
+            recovered = plaintext.read_text(encoding="utf-8")
+
+        self.assertEqual(encrypted, gmcrypto.EXIT_SUCCESS)
+        self.assertEqual(decrypted, gmcrypto.EXIT_SUCCESS)
+        self.assertEqual(encrypt_errors, "")
+        self.assertEqual(decrypt_errors, "")
+        self.assertEqual(recovered, "国密实验")
+
+    def test_binary_file_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            key_file = self.write_key_file(directory)
+            source = directory / "source.bin"
+            package = directory / "package.json"
+            recovered = directory / "recovered.bin"
+            content = b"binary\x00message\xff"
+            source.write_bytes(content)
+
+            encrypted, _, _ = self.run_command(
+                ["encrypt-auth", "--key-file", str(key_file), "--file", str(source),
+                 "--output", str(package)]
+            )
+            decrypted, _, _ = self.run_command(
+                ["decrypt-auth", "--key-file", str(key_file), "--package", str(package),
+                 "--output", str(recovered)]
+            )
+
+            self.assertEqual(encrypted, gmcrypto.EXIT_SUCCESS)
+            self.assertEqual(decrypted, gmcrypto.EXIT_SUCCESS)
+            self.assertEqual(recovered.read_bytes(), content)
+
+    def test_tampered_package_creates_no_plaintext(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            key_file = self.write_key_file(directory)
+            package_path = directory / "package.json"
+            output_path = directory / "must-not-exist.bin"
+            self.run_command(
+                ["encrypt-auth", "--key-file", str(key_file), "--text", "secret",
+                 "--output", str(package_path)]
+            )
+            package = json.loads(package_path.read_text(encoding="utf-8"))
+            package["tag"] = "00" * 32
+            package_path.write_text(json.dumps(package), encoding="utf-8")
+
+            result, _, errors = self.run_command(
+                ["decrypt-auth", "--key-file", str(key_file),
+                 "--package", str(package_path), "--output", str(output_path)]
+            )
+
+            self.assertEqual(result, gmcrypto.EXIT_VERIFY_FAILURE)
+            self.assertIn("authentication failed", errors)
+            self.assertFalse(output_path.exists())
+
+    def test_existing_output_is_not_replaced_without_force(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            key_file = self.write_key_file(directory)
+            output_path = directory / "existing.json"
+            output_path.write_bytes(b"keep")
+
+            result, _, errors = self.run_command(
+                ["encrypt-auth", "--key-file", str(key_file), "--hex", "00",
+                 "--output", str(output_path)]
+            )
+
+            self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+            self.assertIn("already exists", errors)
+            self.assertEqual(output_path.read_bytes(), b"keep")
+
+    def test_invalid_key_file_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            key_file = directory / "bad-key.json"
+            key_file.write_text(json.dumps({"sm4Key": "00"}), encoding="utf-8")
+
+            result, _, errors = self.run_command(
+                ["encrypt-auth", "--key-file", str(key_file), "--text", "x",
+                 "--output", str(directory / "output.json")]
+            )
+
+            self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+            self.assertIn("exactly", errors)
 
 
 if __name__ == "__main__":

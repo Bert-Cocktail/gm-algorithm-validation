@@ -37,6 +37,8 @@
 - 使用 Encrypt-then-MAC 完成加密认证
 - 验证 tag 成功后才执行解密
 - 支持空消息、任意整字节消息、随机 IV 和篡改检测
+- `gmcrypto.py` 支持生成双密钥文件、认证加密和认证解密
+- 密钥不通过命令行传入；输出采用原子替换并默认拒绝覆盖已有文件
 
 ### GmSSL 独立交叉验证
 
@@ -146,6 +148,29 @@ python gmcrypto.py hmac-sm3 --key-hex 00112233445566778899aabbccddeeff --text "a
 
 HMAC 验证成功返回 `OK` 和退出码 `0`，不匹配返回 `FAIL` 和退出码 `1`。
 
+生成认证加密专用密钥文件：
+
+```powershell
+python gmcrypto.py generate-auth-key --output auth-key.json
+```
+
+密钥文件包含独立的 16 byte SM4 密钥和 32 byte HMAC 密钥。请把它保存在仓库外，不要提交到 Git。
+
+认证加密文本或文件：
+
+```powershell
+python gmcrypto.py encrypt-auth --key-file auth-key.json --text "国密实验" --output message.gmenc.json
+python gmcrypto.py encrypt-auth --key-file auth-key.json --file examples\message.txt --output message.gmenc.json
+```
+
+验证并解密到文件：
+
+```powershell
+python gmcrypto.py decrypt-auth --key-file auth-key.json --package message.gmenc.json --output recovered.txt
+```
+
+程序先验证 HMAC，再解密并写入结果；认证失败时不会产生输出明文。已有输出默认不覆盖，明确需要替换时加入 `--force`。
+
 运行 SM4-CTR + HMAC-SM3 组合向量：
 
 ```powershell
@@ -247,12 +272,13 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 95 项测试：
+当前共有 101 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
 - 7 项普通用户 SM3 CLI 测试
 - 8 项 HMAC-SM3 CLI 测试
+- 6 项普通用户认证加密 CLI 测试
 - 8 项 HMAC-SM3 向量执行器测试
 - 5 项统一入口分派测试
 - 21 项认证 SM4 格式、加解密与篡改测试
@@ -263,7 +289,7 @@ python -m unittest discover -s tests -v
 本次实测结果：
 
 ```text
-Ran 95 tests in ...
+Ran 101 tests in ...
 
 OK
 ```
@@ -335,12 +361,14 @@ SM4 测试用例示例：
 - CBC 本身不提供完整性认证，实际系统需要采用经过审查的认证加密方案或加密加认证结构。
 - CTR 本身同样不提供完整性认证，不能把可处理任意长度误认为可直接安全用于文件。
 - 测试向量通过只能说明所测输入输出一致，不能单独证明整个密码库不存在安全漏洞。
-- `gmcrypto.py` 当前只向普通用户开放 SM3；SM4 在补齐安全文件格式、padding 和完整性认证前仍只用于测试向量实验。
+- `gmcrypto.py` 已开放实验性的 SM4-CTR + HMAC-SM3 文件认证加密；该 JSON 格式未经标准化或安全审计，不应视为生产协议。
+- 认证加密密钥文件包含明文十六进制密钥，必须保存在仓库外并限制访问；程序不会代替操作系统密钥库。
+- 认证加密输入文件和 JSON 包限制为 64 MiB，当前实现会把内容读入内存。
 - `--key-hex` 会出现在命令历史和进程参数中，只适合学习实验，不应直接传入真实生产密钥。
 
 ## 下一步计划
 
 1. 使用 OpenSSL EVP API 编写 C 语言 SM3、SM4 程序。
 2. 让同一批 JSON 向量验证命令行后端和 C 后端。
-3. 为真实文件设计带 padding、IV 保存和完整性认证的安全方案。
+3. 研究操作系统密钥库、流式大文件处理和标准化认证加密格式。
 4. 继续开展 SM2 实验，并使用 OpenSSL/GmSSL 交叉验证。
