@@ -1,0 +1,50 @@
+name: Validate cryptography experiments
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Check OpenSSL algorithms
+        run: |
+          openssl version
+          openssl list -digest-algorithms | grep -i SM3
+          openssl list -cipher-algorithms | grep -i SM4
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Run all regression vectors
+        run: python runner.py --all --backend cross --result-dir results
+
+      - name: Process and verify ACVP-style requests
+        run: |
+          python acvp_adapter.py --all --request-dir acvp/requests --response-dir results/acvp --backend cross
+          python acvp_manifest.py --request-dir acvp/requests --output results/acvp/manifest.json
+          python acvp_adapter.py --verify-responses --request-dir acvp/requests --response-dir results/acvp --backend cross
+
+      - name: Generate archival report
+        run: |
+          mkdir -p reports
+          python experiment_report.py --vector-summary results/summary.json --acvp-summary results/acvp/summary.json --manifest results/acvp/manifest.json --output reports/ci-experiment-report.md
+
+      - name: Upload validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-results
+          path: |
+            results/
+            reports/ci-experiment-report.md

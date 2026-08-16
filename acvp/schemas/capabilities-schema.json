@@ -39,7 +39,7 @@
     "testType": {
       "type": "object",
       "properties": {
-        "name": {"enum": ["AFT", "MCT", "GDT"]},
+        "name": {"enum": ["AFT", "MCT", "LDT"]},
         "status": {"enum": ["supported", "recognized-not-implemented"]}
       },
       "required": ["name", "status"],

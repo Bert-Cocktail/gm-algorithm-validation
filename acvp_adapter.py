@@ -35,7 +35,7 @@ SUMMARY_SCHEMA = PROJECT_ROOT / "acvp" / "schemas" / "batch-summary-schema.json"
 TEST_TYPES = [
     {"name": "AFT", "status": "supported"},
     {"name": "MCT", "status": "recognized-not-implemented"},
-    {"name": "GDT", "status": "recognized-not-implemented"},
+    {"name": "LDT", "status": "recognized-not-implemented"},
 ]
 
 CAPABILITIES: dict[str, Any] = {
@@ -118,6 +118,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("request_file", type=Path, nargs="?")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--all", action="store_true", help="process all request files")
+    parser.add_argument(
+        "--verify-responses",
+        action="store_true",
+        help="recompute and verify all stored response files",
+    )
     parser.add_argument("--request-dir", type=Path)
     parser.add_argument("--response-dir", type=Path)
     parser.add_argument(
@@ -661,6 +666,64 @@ def run_batch(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def _load_response(path: Path) -> list[dict[str, Any]]:
+    try:
+        with path.open("r", encoding="utf-8-sig") as response_file:
+            response = json.load(response_file)
+    except FileNotFoundError as error:
+        raise AdapterError(f"response file not found: {path}") from error
+    except (OSError, json.JSONDecodeError) as error:
+        raise AdapterError(f"cannot read response file {path}: {error}") from error
+    validate_schema(response, RESPONSE_SCHEMA, "response")
+    return response
+
+
+def verify_responses(args: argparse.Namespace) -> int:
+    if args.request_dir is None or args.response_dir is None:
+        raise AdapterError("--verify-responses requires --request-dir and --response-dir")
+    request_dir = args.request_dir.resolve()
+    response_dir = args.response_dir.resolve()
+    if not request_dir.is_dir():
+        raise AdapterError(f"request directory not found: {args.request_dir}")
+    if not response_dir.is_dir():
+        raise AdapterError(f"response directory not found: {args.response_dir}")
+    request_paths = sorted(request_dir.glob("*-request.json"), key=lambda path: path.name)
+    if not request_paths:
+        raise AdapterError(f"no *-request.json files found in: {args.request_dir}")
+
+    openssl = runner.resolve_openssl(args.openssl) if args.backend != "gmssl" else ""
+    passed = mismatched = errors = 0
+    seen_vs_ids: set[int] = set()
+    for request_path in request_paths:
+        response_path = response_dir / _batch_response_name(request_path)
+        try:
+            version, request = load_request(request_path)
+            if request["vsId"] in seen_vs_ids:
+                raise AdapterError(f"duplicate vsId across request files: {request['vsId']}")
+            seen_vs_ids.add(request["vsId"])
+            expected, backend_mismatches = process_request(
+                version, request, openssl, args.backend
+            )
+            actual = _load_response(response_path)
+            if actual != expected or backend_mismatches:
+                mismatched += 1
+                print(f"[FAIL] {response_path.name}")
+            else:
+                passed += 1
+                print(f"[PASS] {response_path.name}")
+        except PROCESS_ERRORS as error:
+            errors += 1
+            print(f"[ERROR] {request_path.name}: {error}", file=sys.stderr)
+
+    print(
+        f"\nVerification total: Files={len(request_paths)}, Passed={passed}, "
+        f"Mismatched={mismatched}, Errors={errors}"
+    )
+    if errors:
+        return EXIT_INPUT_ERROR
+    return EXIT_TEST_FAILURE if mismatched else EXIT_SUCCESS
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
@@ -668,7 +731,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if any(
                 value is not None
                 for value in (args.request_file, args.output, args.request_dir, args.response_dir)
-            ) or args.all:
+            ) or args.all or args.verify_responses:
                 raise AdapterError(
                     "--capabilities cannot be combined with request or batch options"
                 )
@@ -676,9 +739,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(CAPABILITIES, indent=2, ensure_ascii=False))
             return EXIT_SUCCESS
         if args.all:
-            if args.request_file is not None or args.output is not None:
+            if args.verify_responses or args.request_file is not None or args.output is not None:
                 raise AdapterError("--all cannot be combined with request_file or --output")
             return run_batch(args)
+        if args.verify_responses:
+            if args.request_file is not None or args.output is not None:
+                raise AdapterError(
+                    "--verify-responses cannot be combined with request_file or --output"
+                )
+            return verify_responses(args)
         if args.request_dir is not None or args.response_dir is not None:
             raise AdapterError("--request-dir and --response-dir require --all")
         if args.request_file is None or args.output is None:

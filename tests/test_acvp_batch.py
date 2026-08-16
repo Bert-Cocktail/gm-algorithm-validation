@@ -138,6 +138,86 @@ class TestAcvpBatch(unittest.TestCase):
 
         self.assertEqual(exit_code, acvp_adapter.EXIT_INPUT_ERROR)
 
+    def test_verify_responses_accepts_fresh_batch_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            root = Path(directory_name)
+            request_dir = root / "requests"
+            response_dir = root / "responses"
+            request_dir.mkdir()
+            self.copy_sample("sm3-request.json", request_dir)
+            self.assertEqual(
+                self.run_batch(request_dir, response_dir), acvp_adapter.EXIT_SUCCESS
+            )
+
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                exit_code = acvp_adapter.main(
+                    [
+                        "--verify-responses",
+                        "--request-dir",
+                        str(request_dir),
+                        "--response-dir",
+                        str(response_dir),
+                        "--backend",
+                        "cross",
+                    ]
+                )
+
+        self.assertEqual(exit_code, acvp_adapter.EXIT_SUCCESS)
+
+    def test_verify_responses_detects_tampered_result(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            root = Path(directory_name)
+            request_dir = root / "requests"
+            response_dir = root / "responses"
+            request_dir.mkdir()
+            self.copy_sample("sm3-request.json", request_dir)
+            self.assertEqual(
+                self.run_batch(request_dir, response_dir), acvp_adapter.EXIT_SUCCESS
+            )
+            response_path = response_dir / "sm3-response.json"
+            response = json.loads(response_path.read_text(encoding="utf-8"))
+            response[1]["testGroups"][0]["tests"][0]["md"] = "00" * 32
+            response_path.write_text(json.dumps(response), encoding="utf-8")
+
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                exit_code = acvp_adapter.main(
+                    [
+                        "--verify-responses",
+                        "--request-dir",
+                        str(request_dir),
+                        "--response-dir",
+                        str(response_dir),
+                        "--backend",
+                        "cross",
+                    ]
+                )
+
+        self.assertEqual(exit_code, acvp_adapter.EXIT_TEST_FAILURE)
+
+    def test_verify_responses_reports_missing_response_as_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            root = Path(directory_name)
+            request_dir = root / "requests"
+            response_dir = root / "responses"
+            request_dir.mkdir()
+            response_dir.mkdir()
+            self.copy_sample("sm3-request.json", request_dir)
+
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                exit_code = acvp_adapter.main(
+                    [
+                        "--verify-responses",
+                        "--request-dir",
+                        str(request_dir),
+                        "--response-dir",
+                        str(response_dir),
+                        "--backend",
+                        "cross",
+                    ]
+                )
+
+        self.assertEqual(exit_code, acvp_adapter.EXIT_INPUT_ERROR)
+
 
 if __name__ == "__main__":
     unittest.main()

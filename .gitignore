@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 results/
+reports/ci-experiment-report.md
 build/
 auth-key.json
 *.gmkey.json

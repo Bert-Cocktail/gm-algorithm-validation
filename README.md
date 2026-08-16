@@ -61,7 +61,11 @@
 - 请求和生成的响应都会通过仓库内 JSON Schema 校验
 - `--capabilities` 输出算法、模式、方向及长度约束等机器可读能力
 - `--all` 可批量处理请求目录，逐文件生成响应和 ACVP 汇总报告
-- 请求会与能力描述交叉检查；MCT/GDT 可识别但尚不执行
+- 请求会与能力描述交叉检查；MCT/LDT 可识别但尚不执行
+- `acvp_manifest.py` 记录请求 SHA-256、`vsId`、算法和测试数量
+- `--verify-responses` 可重新计算并复核已保存响应
+- `experiment_report.py` 可生成包含环境、结果和请求哈希的归档报告
+- GitHub Actions 自动执行测试、两类批量验证、复核和报告生成
 
 两个执行器都会输出每个测试用例的 PASS/FAIL，并区分测试失败与输入、环境错误。
 
@@ -75,6 +79,8 @@ gm-algorithm-validation/
 ├── gmcrypto.py
 ├── runner.py
 ├── acvp_adapter.py
+├── acvp_manifest.py
+├── experiment_report.py
 ├── hmac_sm3_runner.py
 ├── authenticated_sm4.py
 ├── authenticated_sm4_runner.py
@@ -90,6 +96,7 @@ gm-algorithm-validation/
 │   ├── schemas/
 │   │   ├── capabilities-schema.json
 │   │   ├── batch-summary-schema.json
+│   │   ├── manifest-schema.json
 │   │   ├── request-schema.json
 │   │   └── response-schema.json
 │   ├── requests/
@@ -103,6 +110,8 @@ gm-algorithm-validation/
 ├── tests/
 │   ├── test_acvp_adapter.py
 │   ├── test_acvp_batch.py
+│   ├── test_acvp_manifest.py
+│   ├── test_experiment_report.py
 │   ├── test_sm3.py
 │   ├── test_hmac_sm3.py
 │   ├── test_authenticated_sm4.py
@@ -122,7 +131,12 @@ gm-algorithm-validation/
 │   ├── cross-validation.md
 │   ├── batch-validation.md
 │   ├── acvp-format-experiment.md
+│   ├── mct-research.md
 │   └── sm4-experiment.md
+├── reports/
+│   ├── README.md
+│   └── experiment-report.md
+├── .github/workflows/validate.yml
 └── results/
 ```
 
@@ -300,7 +314,31 @@ python acvp_adapter.py --all --request-dir acvp\requests --response-dir results\
 
 程序只发现 `*-request.json`，按文件名排序处理。单个请求错误不会阻止后续文件；响应目录会自动创建，并生成 `summary.json`，记录文件数、测试数、错误数和后端不一致数。跨文件 `vsId` 必须唯一。
 
-能力描述不是展示信息：请求的测试类型、消息和密钥长度、SM4 模式、方向、IV 与负载长度都会与其校验。`AFT` 当前可执行；`MCT`、`GDT` 仅被 Schema 识别，并返回“未实现”，因为项目尚未实现对应规范循环。每种算法的 `identifierMapping` 记录本地名称和标准来源；当前未断言任何正式 NIST ACVP 注册标识，所以 `acvpAlgorithm` 为 `null`。
+生成请求 manifest：
+
+```powershell
+python acvp_manifest.py --request-dir acvp\requests --output results\acvp\manifest.json
+```
+
+复核已保存响应：
+
+```powershell
+python acvp_adapter.py --verify-responses --request-dir acvp\requests --response-dir results\acvp --backend cross
+```
+
+生成归档实验报告：
+
+```powershell
+python experiment_report.py `
+  --vector-summary results\summary.json `
+  --acvp-summary results\acvp\summary.json `
+  --manifest results\acvp\manifest.json `
+  --output reports\experiment-report.md
+```
+
+当前报告见 [reports/experiment-report.md](reports/experiment-report.md)。GitHub Actions 工作流会在推送和拉取请求时自动运行同一套检查，并上传结构化结果与 CI 报告。
+
+能力描述不是展示信息：请求的测试类型、消息和密钥长度、SM4 模式、方向、IV 与负载长度都会与其校验。`AFT` 当前可执行；`MCT`、`LDT` 仅被 Schema 识别，并返回“未实现”，因为项目尚未找到明确适用于 SM3/SM4 的权威规则。每种算法的 `identifierMapping` 记录本地名称和标准来源；当前未断言任何正式 NIST ACVP 注册标识，所以 `acvpAlgorithm` 为 `null`。
 
 批量运行全部向量并生成报告：
 
@@ -339,7 +377,7 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 136 项测试：
+当前共有 146 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -355,12 +393,14 @@ python -m unittest discover -s tests -v
 - 6 项结构化结果文件测试
 - 5 项批量向量执行与汇总测试
 - 12 项 ACVP 风格请求、响应、Schema、能力约束和标识映射测试
-- 5 项 ACVP 请求批量处理与汇总测试
+- 8 项 ACVP 请求批量处理、汇总和响应复核测试
+- 4 项请求 manifest 测试
+- 3 项归档实验报告测试
 
 本次实测结果：
 
 ```text
-Ran 136 tests in ...
+Ran 146 tests in ...
 
 OK
 ```

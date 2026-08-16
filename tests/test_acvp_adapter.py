@@ -235,23 +235,25 @@ class TestAcvpAdapter(unittest.TestCase):
                 {"supported"},
             )
 
-    def test_recognized_mct_is_rejected_as_not_implemented(self) -> None:
-        request = {
-            "vsId": 9,
-            "algorithm": "SM3",
-            "testGroups": [
-                {
-                    "tgId": 1,
-                    "testType": "MCT",
-                    "tests": [{"tcId": 1, "msg": "", "msgLen": 0}],
+    def test_recognized_test_types_are_rejected_as_not_implemented(self) -> None:
+        for test_type in ("MCT", "LDT"):
+            with self.subTest(test_type=test_type):
+                request = {
+                    "vsId": 9,
+                    "algorithm": "SM3",
+                    "testGroups": [
+                        {
+                            "tgId": 1,
+                            "testType": test_type,
+                            "tests": [{"tcId": 1, "msg": "", "msgLen": 0}],
+                        }
+                    ],
                 }
-            ],
-        }
 
-        exit_code, response = self.run_request(request)
+                exit_code, response = self.run_request(request)
 
-        self.assertEqual(exit_code, acvp_adapter.EXIT_INPUT_ERROR)
-        self.assertEqual(response, [])
+                self.assertEqual(exit_code, acvp_adapter.EXIT_INPUT_ERROR)
+                self.assertEqual(response, [])
 
     def test_request_is_checked_against_runtime_capabilities(self) -> None:
         request = {

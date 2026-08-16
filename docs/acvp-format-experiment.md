@@ -83,7 +83,7 @@ python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-respo
 
 SM4 的 ECB 组不需要 `iv`；CBC 和 CTR 需要 128 bit IV。SM4-CTR-HMAC-SM3 是本项目的实验组合，不是这里声称的 ACVP 标准算法标识。
 
-组级 `testType` 可写为 `AFT`、`MCT` 或 `GDT`。当前只有 `AFT` 具备正确执行逻辑；`MCT` 与 `GDT` 会被识别并明确拒绝为“尚未实现”，不会套用普通 AFT 计算。HMAC-SM3 组还声明 `keyLen` 与 `macLen`，SM4 组声明 `direction`、`keyLen` 与 `mode`。`msgLen` 位于具体测试用例中，因为同一组可以包含不同长度的消息。
+组级 `testType` 可写为 `AFT`、`MCT` 或 `LDT`。当前只有 `AFT` 具备正确执行逻辑；`MCT` 与 `LDT` 会被识别并明确拒绝为“尚未实现”，不会套用普通 AFT 计算。HMAC-SM3 组还声明 `keyLen` 与 `macLen`，SM4 组声明 `direction`、`keyLen` 与 `mode`。`msgLen` 位于具体测试用例中，因为同一组可以包含不同长度的消息。MCT 调研见 [SM3/SM4 MCT 规则调研](mct-research.md)。
 
 ## JSON Schema 校验
 
@@ -139,6 +139,41 @@ python acvp_adapter.py --all `
 
 跨请求文件的 `vsId` 必须唯一。单个文件出现 Schema、参数或重复 ID 错误时，其他文件仍继续；总退出码优先级为错误 `2`、后端不一致 `1`、全部成功 `0`。请求目录和响应目录不能相同。
 
+## 请求清单与响应复核
+
+生成可追溯 manifest：
+
+```powershell
+python acvp_manifest.py --request-dir acvp\requests --output results\acvp\manifest.json
+```
+
+清单按文件名排序，记录每个请求的 SHA-256、字节数、`vsId`、算法和测试数量，并使用 `manifest-schema.json` 校验。输入发生任何字节变化都会改变哈希。
+
+重新计算并复核响应：
+
+```powershell
+python acvp_adapter.py --verify-responses `
+  --request-dir acvp\requests `
+  --response-dir results\acvp `
+  --backend cross
+```
+
+响应内容不同返回退出码 `1`；响应缺失、格式错误或请求无效返回 `2`。所有文件均会继续检查。
+
+## 归档报告与持续集成
+
+`experiment_report.py` 读取回归向量汇总、ACVP 汇总和 manifest，生成 Markdown 报告：
+
+```powershell
+python experiment_report.py `
+  --vector-summary results\summary.json `
+  --acvp-summary results\acvp\summary.json `
+  --manifest results\acvp\manifest.json `
+  --output reports\experiment-report.md
+```
+
+报告记录 Python、OpenSSL、gmssl、Git 提交、通过率和请求哈希，并保留非认证范围说明。`.github/workflows/validate.yml` 在 push 和 pull request 时自动运行 146 项测试、53 个回归向量、ACVP 批量处理、manifest、响应复核和报告生成。
+
 ## 交叉后端诊断
 
 选择 `--backend cross` 时，两套后端都会运行。若结果不一致，程序继续处理后续测试，使用 OpenSSL 结果完成响应，并返回退出码 `1`。响应额外包含：
@@ -174,9 +209,13 @@ python acvp_adapter.py --all `
 
 `tests/test_acvp_adapter.py` 包含 12 项测试，覆盖 SM3、HMAC-SM3、SM4 加解密、认证组合、重复 ID 与覆盖保护、多个交叉后端不一致的完整收集、能力描述与 Schema、MCT 拒绝、能力范围及标识映射。
 
-`tests/test_acvp_batch.py` 包含 5 项测试，覆盖三类样例批量成功、错误后继续、后端不一致汇总、跨文件重复 `vsId` 和目录保护。
+`tests/test_acvp_batch.py` 包含 8 项测试，覆盖三类样例批量成功、错误后继续、后端不一致汇总、跨文件重复 `vsId`、目录保护，以及响应复核的成功、篡改和缺失场景。
+
+`tests/test_acvp_manifest.py` 包含 4 项测试，`tests/test_experiment_report.py` 包含 3 项测试。
 
 ```powershell
 python -m unittest tests.test_acvp_adapter -v
 python -m unittest tests.test_acvp_batch -v
+python -m unittest tests.test_acvp_manifest -v
+python -m unittest tests.test_experiment_report -v
 ```
