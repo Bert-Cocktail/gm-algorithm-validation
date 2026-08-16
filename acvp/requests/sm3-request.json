@@ -1,0 +1,26 @@
+[
+  {
+    "acvVersion": "1.0"
+  },
+  {
+    "vsId": 1,
+    "algorithm": "SM3",
+    "testGroups": [
+      {
+        "tgId": 1,
+        "tests": [
+          {
+            "tcId": 1,
+            "msg": "616263",
+            "msgLen": 24
+          },
+          {
+            "tcId": 2,
+            "msg": "",
+            "msgLen": 0
+          }
+        ]
+      }
+    ]
+  }
+]

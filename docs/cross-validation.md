@@ -70,7 +70,7 @@ OK
 全项目测试结果：
 
 ```text
-Ran 119 tests in ...
+Ran 125 tests in ...
 
 OK
 ```
@@ -81,13 +81,30 @@ OK
 python runner.py vectors\sm4.json --backend cross --result-json results\sm4-cross.json
 ```
 
-报告记录所选后端、逐用例状态、expected/actual、汇总和退出码。若两套后端产生不同结果，报告状态为 `failed`，并写入 `error.type: "backend_mismatch"`、`tcId`、`operation`、`openssl` 和 `gmssl`；SM4 还会包含 `mode` 与 `direction`。
+报告记录所选后端、逐用例状态、expected/actual、汇总和退出码。若两套后端产生不同结果，执行器不会在第一项停止，而会完成当前向量文件并写入：
+
+```json
+{
+  "type": "backend_mismatches",
+  "count": 2,
+  "mismatches": [
+    {
+      "tcId": 1,
+      "operation": "SM3",
+      "openssl": "...",
+      "gmssl": "..."
+    }
+  ]
+}
+```
+
+SM4 记录还包含 `mode` 与 `direction`。认证组合的后续密码操作依赖先前中间结果，因此同一个 `tcId` 最多记录第一项后端不一致，然后继续处理下一个 `tcId`。
 
 ## 当前边界
 
 - 交叉验证测试需要安装 `requirements-dev.txt` 中的开发依赖。
 - `runner.py` 已支持 `--backend openssl|gmssl|cross`；OpenSSL 仍是默认后端。
-- `gmssl` 模式不查找 OpenSSL；`cross` 模式逐项比较两套结果，不一致时返回退出码 `1`。
+- `gmssl` 模式不查找 OpenSSL；`cross` 模式逐项比较两套结果，收集当前文件全部不一致并返回退出码 `1`。
 - HMAC 模式层以及 ECB/CBC/CTR 组合代码属于本项目包装逻辑，密码原语来自 GmSSL。
 - 47 个非标准实验/回归向量的 `source` 标明由 OpenSSL 1.1.1i 生成、Python gmssl 3.2.2 交叉验证。4 个标准向量和 2 个推导向量的来源说明保持独立。
 - Python `gmssl` 项目与 GmSSL 官方 C 项目不能简单视为同一个发行物，文档中明确记录的是 PyPI `gmssl 3.2.2`。

@@ -123,28 +123,42 @@ def run_tests(
     hmac_fn: HmacFunction = hmac_sm3,
     output: TextIO = sys.stdout,
     results: list[dict[str, Any]] | None = None,
+    mismatches: list[dict[str, Any]] | None = None,
 ) -> int:
     passed = 0
     for test in tests:
+        backend_mismatch: dict[str, Any] | None = None
         try:
             actual = hmac_fn(openssl, test["key"], bytes.fromhex(test["msg"]))
         except Exception as error:
             if hasattr(error, "set_test_context"):
                 error.set_test_context(test["tcId"])
-            raise
-        matches = actual == test["tag"]
+            if (
+                mismatches is None
+                or not hasattr(error, "as_error_detail")
+                or not hasattr(error, "preferred_result")
+            ):
+                raise
+            backend_mismatch = error.as_error_detail()
+            mismatches.append(backend_mismatch)
+            actual = error.preferred_result
+            print(f"[FAIL] backend mismatch: {error}", file=sys.stderr)
+        matches = actual == test["tag"] and backend_mismatch is None
         if results is not None:
-            results.append(
-                {
+            result = {
                     "tcId": test["tcId"],
                     "status": "passed" if matches else "failed",
                     "expected": test["tag"],
                     "actual": actual,
                 }
-            )
+            if backend_mismatch is not None:
+                result["backendMismatch"] = backend_mismatch
+            results.append(result)
         if matches:
             passed += 1
             print(f"[PASS] tcId={test['tcId']}", file=output)
+        elif backend_mismatch is not None:
+            print(f"[FAIL] tcId={test['tcId']} backend mismatch", file=output)
         else:
             print(f"[FAIL] tcId={test['tcId']}", file=output)
             print(f"       expected: {test['tag']}", file=output)

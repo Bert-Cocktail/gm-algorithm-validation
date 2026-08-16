@@ -149,12 +149,17 @@ class TestStructuredResults(unittest.TestCase):
 
         self.assertEqual(exit_code, runner.EXIT_TEST_FAILURE)
         self.assertEqual(report["status"], "failed")
-        self.assertIsNone(report["summary"])
-        self.assertEqual(report["error"]["type"], "backend_mismatch")
-        self.assertEqual(report["error"]["tcId"], 1)
-        self.assertEqual(report["error"]["operation"], "SM3")
-        self.assertTrue(report["error"]["openssl"].startswith("66c7"))
-        self.assertEqual(report["error"]["gmssl"], "00" * 32)
+        self.assertEqual(report["summary"], {"total": 15, "passed": 0, "failed": 15})
+        self.assertEqual(report["error"]["type"], "backend_mismatches")
+        self.assertEqual(report["error"]["count"], 15)
+        self.assertEqual(len(report["error"]["mismatches"]), 15)
+        first = report["error"]["mismatches"][0]
+        last = report["error"]["mismatches"][-1]
+        self.assertEqual(first["tcId"], 1)
+        self.assertEqual(last["tcId"], 15)
+        self.assertEqual(first["operation"], "SM3")
+        self.assertTrue(first["openssl"].startswith("66c7"))
+        self.assertEqual(first["gmssl"], "00" * 32)
 
 
 if __name__ == "__main__":

@@ -48,12 +48,20 @@
 - 使用 GmSSL 原始 SM4 分组接口组合无 padding ECB、CBC 和 CTR
 - `runner.py` 支持 `openssl`、`gmssl` 和 `cross` 三种后端
 - `cross` 会逐项比较 OpenSSL 与 GmSSL，任何不一致都返回测试失败
+- `cross` 会继续执行当前向量文件，收集全部后端不一致及对应 `tcId`
 - 统一入口可使用 `--result-json` 输出便于归档和程序分析的结构化报告
 - `--all` 可批量运行全部向量，生成逐文件报告和总汇 `summary.json`
 
+### 本地 ACVP 风格请求与响应
+
+- `acvp_adapter.py` 接收 `[acvVersion, vectorSet]` 两对象数组
+- 请求只包含输入，响应按 `vsId`、`tgId`、`tcId` 返回 `md`、`mac`、`ct` 或 `pt`
+- 支持 SM3、HMAC-SM3、SM4，以及本项目实验性的 SM4-CTR-HMAC-SM3
+- 支持 `openssl`、`gmssl`、`cross` 后端；交叉不一致写入本地扩展 `localDiagnostics`
+
 两个执行器都会输出每个测试用例的 PASS/FAIL，并区分测试失败与输入、环境错误。
 
-当前尚未实现：C API、padding、生产级认证文件格式、SM2、性能测试和 ACVTS 接入。
+当前尚未实现：C API、padding、生产级认证文件格式、SM2、性能测试和 ACVTS 网络接入。ACVP 风格适配器是本地格式实验，不是 ACVTS 客户端或认证结果。
 
 ## 项目结构
 
@@ -62,6 +70,7 @@ gm-algorithm-validation/
 ├── README.md
 ├── gmcrypto.py
 ├── runner.py
+├── acvp_adapter.py
 ├── hmac_sm3_runner.py
 ├── authenticated_sm4.py
 ├── authenticated_sm4_runner.py
@@ -73,7 +82,11 @@ gm-algorithm-validation/
 │   ├── hmac-sm3.json
 │   ├── sm4-ctr-hmac-sm3.json
 │   └── sm4.json
+├── acvp/
+│   └── requests/
+│       └── sm3-request.json
 ├── tests/
+│   ├── test_acvp_adapter.py
 │   ├── test_sm3.py
 │   ├── test_hmac_sm3.py
 │   ├── test_authenticated_sm4.py
@@ -92,6 +105,7 @@ gm-algorithm-validation/
 │   ├── authenticated-sm4-experiment.md
 │   ├── cross-validation.md
 │   ├── batch-validation.md
+│   ├── acvp-format-experiment.md
 │   └── sm4-experiment.md
 └── results/
 ```
@@ -244,7 +258,15 @@ python runner.py vectors\sm3.json --backend cross
 python runner.py vectors\sm3.json --backend cross --result-json results\sm3-cross.json
 ```
 
-终端仍显示原有 PASS/FAIL；结果文件记录算法、后端、退出码、汇总以及每个 `tcId` 的 expected/actual。后端不一致会精确记录当前 `tcId`、operation、OpenSSL 结果和 GmSSL 结果；SM4 还记录模式与方向。结果文件采用同目录临时文件原子写入，并拒绝覆盖输入向量文件。
+终端仍显示原有 PASS/FAIL；结果文件记录算法、后端、退出码、汇总以及每个 `tcId` 的 expected/actual。后端不一致不会在第一项停止，而会记录当前文件中全部不一致；`error.type` 为 `backend_mismatches`，并包含 `count` 和 `mismatches` 数组。每项包含 `tcId`、`operation`、OpenSSL 结果和 GmSSL 结果；SM4 还记录模式与方向。认证组合因后续步骤依赖中间结果，每个 `tcId` 最多记录第一项不一致，然后继续下一个 `tcId`。结果文件采用同目录临时文件原子写入，并拒绝覆盖输入向量文件。
+
+运行本地 ACVP 风格请求：
+
+```powershell
+python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-response.json --backend cross
+```
+
+请求使用 `acvVersion`、`vsId`、`testGroups`、`tgId` 和 `tcId` 层级，响应保留相同标识并返回计算结果。完整字段与限制参见 [ACVP 风格格式实验](docs/acvp-format-experiment.md)。
 
 批量运行全部向量并生成报告：
 
@@ -283,7 +305,7 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 119 项测试：
+当前共有 125 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -298,11 +320,12 @@ python -m unittest discover -s tests -v
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
 - 5 项批量向量执行与汇总测试
+- 6 项 ACVP 风格请求与响应适配器测试
 
 本次实测结果：
 
 ```text
-Ran 119 tests in ...
+Ran 125 tests in ...
 
 OK
 ```

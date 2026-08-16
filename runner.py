@@ -39,12 +39,19 @@ class CrossBackendMismatch(Exception):
     """Raised when OpenSSL and GmSSL return different results."""
 
     def __init__(self, operation: str, openssl_result: Any, gmssl_result: Any):
+        self._openssl_raw = openssl_result
+        self._gmssl_raw = gmssl_result
         self.operation = operation
         self.openssl_result = self._display(openssl_result)
         self.gmssl_result = self._display(gmssl_result)
         self.tc_id: int | None = None
         self.context: dict[str, Any] = {}
         super().__init__(operation)
+
+    @property
+    def preferred_result(self) -> Any:
+        """Return the OpenSSL result so validation can continue after recording."""
+        return self._openssl_raw
 
     @staticmethod
     def _display(value: Any) -> str:
@@ -404,32 +411,42 @@ def run_tests(
     digest_fn: Callable[[str, bytes], str] = sm3_digest,
     output: TextIOBase = sys.stdout,
     results: list[dict[str, Any]] | None = None,
+    mismatches: list[dict[str, Any]] | None = None,
 ) -> int:
     passed = 0
 
     for test in tests:
         tc_id = test["tcId"]
+        backend_mismatch: dict[str, Any] | None = None
         try:
             actual = digest_fn(openssl, bytes.fromhex(test["msg"]))
         except CrossBackendMismatch as error:
             error.set_test_context(tc_id)
-            raise
+            if mismatches is None:
+                raise
+            backend_mismatch = error.as_error_detail()
+            mismatches.append(backend_mismatch)
+            actual = error.preferred_result
+            print(f"[FAIL] backend mismatch: {error}", file=sys.stderr)
         expected = test["md"]
 
-        matches = actual == expected
+        matches = actual == expected and backend_mismatch is None
         if results is not None:
-            results.append(
-                {
+            result = {
                     "tcId": tc_id,
                     "status": "passed" if matches else "failed",
                     "expected": expected,
                     "actual": actual,
                 }
-            )
+            if backend_mismatch is not None:
+                result["backendMismatch"] = backend_mismatch
+            results.append(result)
 
         if matches:
             passed += 1
             print(f"[PASS] tcId={tc_id}", file=output)
+        elif backend_mismatch is not None:
+            print(f"[FAIL] tcId={tc_id} backend mismatch", file=output)
         else:
             print(f"[FAIL] tcId={tc_id}", file=output)
             print(f"       expected: {expected}", file=output)
@@ -449,6 +466,7 @@ def run_document(
     *,
     backend: str = "openssl",
     results: list[dict[str, Any]] | None = None,
+    mismatches: list[dict[str, Any]] | None = None,
 ) -> int:
     algorithm = str(document.get("algorithm", "")).upper()
 
@@ -460,6 +478,7 @@ def run_document(
             openssl,
             digest_fn=_digest_function(backend),
             results=results,
+            mismatches=mismatches,
         )
 
     if algorithm == "SM4":
@@ -470,6 +489,7 @@ def run_document(
             openssl,
             crypt_fn=_crypt_function(backend),
             results=results,
+            mismatches=mismatches,
         )
 
     if algorithm == "HMAC-SM3":
@@ -478,6 +498,7 @@ def run_document(
             openssl,
             hmac_fn=_hmac_function(backend),
             results=results,
+            mismatches=mismatches,
         )
 
     if algorithm == "SM4-CTR-HMAC-SM3":
@@ -488,6 +509,7 @@ def run_document(
             encrypt_fn=encrypt_fn,
             decrypt_fn=decrypt_fn,
             results=results,
+            mismatches=mismatches,
         )
 
     name = algorithm or "<missing>"
@@ -545,7 +567,7 @@ def _build_report(
         "summary": None,
         "tests": tests,
     }
-    if exit_code in (EXIT_SUCCESS, EXIT_TEST_FAILURE) and error is None:
+    if exit_code in (EXIT_SUCCESS, EXIT_TEST_FAILURE):
         passed = sum(test["status"] == "passed" for test in tests)
         report["summary"] = {
             "total": len(tests),
@@ -559,6 +581,7 @@ def _build_report(
 
 def _execute_single(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     test_results: list[dict[str, Any]] = []
+    mismatches: list[dict[str, Any]] = []
     algorithm: str | None = None
     error_detail: dict[str, Any] | None = None
     try:
@@ -567,8 +590,20 @@ def _execute_single(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         algorithm = str(raw_algorithm).upper() if raw_algorithm is not None else None
         openssl = resolve_openssl(args.openssl) if args.backend != "gmssl" else ""
         exit_code = run_document(
-            document, openssl, backend=args.backend, results=test_results
+            document,
+            openssl,
+            backend=args.backend,
+            results=test_results,
+            mismatches=mismatches,
         )
+        if mismatches:
+            exit_code = EXIT_TEST_FAILURE
+            error_detail = {
+                "type": "backend_mismatches",
+                "message": f"{len(mismatches)} backend mismatch(es) detected",
+                "count": len(mismatches),
+                "mismatches": mismatches,
+            }
     except CrossBackendMismatch as error:
         print(f"[FAIL] backend mismatch: {error}", file=sys.stderr)
         exit_code = EXIT_TEST_FAILURE

@@ -236,6 +236,7 @@ def run_tests(
     crypt_fn: CryptFunction = sm4_crypt,
     output: TextIO = sys.stdout,
     results: list[dict[str, Any]] | None = None,
+    mismatches: list[dict[str, Any]] | None = None,
 ) -> int:
     passed = 0
 
@@ -243,6 +244,7 @@ def run_tests(
         direction = test["direction"]
         input_hex = test["pt"] if direction == "encrypt" else test["ct"]
         expected = test["ct"] if direction == "encrypt" else test["pt"]
+        backend_mismatch: dict[str, Any] | None = None
         try:
             actual = crypt_fn(
                 openssl,
@@ -257,16 +259,24 @@ def run_tests(
                 error.set_test_context(
                     test["tcId"], mode=test["mode"], direction=direction
                 )
-            raise
+            if (
+                mismatches is None
+                or not hasattr(error, "as_error_detail")
+                or not hasattr(error, "preferred_result")
+            ):
+                raise
+            backend_mismatch = error.as_error_detail()
+            mismatches.append(backend_mismatch)
+            actual = error.preferred_result.hex()
+            print(f"[FAIL] backend mismatch: {error}", file=sys.stderr)
 
         label = (
             f"tcId={test['tcId']} mode={test['mode']} "
             f"direction={direction}"
         )
-        matches = actual == expected
+        matches = actual == expected and backend_mismatch is None
         if results is not None:
-            results.append(
-                {
+            result = {
                     "tcId": test["tcId"],
                     "mode": test["mode"],
                     "direction": direction,
@@ -274,10 +284,14 @@ def run_tests(
                     "expected": expected,
                     "actual": actual,
                 }
-            )
+            if backend_mismatch is not None:
+                result["backendMismatch"] = backend_mismatch
+            results.append(result)
         if matches:
             passed += 1
             print(f"[PASS] {label}", file=output)
+        elif backend_mismatch is not None:
+            print(f"[FAIL] {label} backend mismatch", file=output)
         else:
             print(f"[FAIL] {label}", file=output)
             print(f"       expected: {expected}", file=output)

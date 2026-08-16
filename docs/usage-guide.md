@@ -534,7 +534,7 @@ python runner.py vectors\sm4.json --openssl "C:\完整路径\openssl.exe"
 }
 ```
 
-`status` 为 `passed`、`failed` 或 `error`。普通测试不一致时，每项结果保留 expected/actual；SM4 额外记录 `mode` 和 `direction`；认证组合分别记录密文、tag 和恢复明文。输入无效时 `summary` 为 `null`，并增加 `error.type` 与 `error.message`。交叉后端不一致还记录 `tcId`、`operation`、`openssl`、`gmssl`，SM4 同时记录模式和方向。
+`status` 为 `passed`、`failed` 或 `error`。普通测试不一致时，每项结果保留 expected/actual；SM4 额外记录 `mode` 和 `direction`；认证组合分别记录密文、tag 和恢复明文。输入无效时 `summary` 为 `null`，并增加 `error.type` 与 `error.message`。交叉后端不一致使用 `error.type: "backend_mismatches"`，`count` 给出总数，`mismatches` 数组逐项记录 `tcId`、`operation`、`openssl`、`gmssl`；SM4 同时记录模式和方向。执行器收集当前文件全部不一致，认证组合则因步骤依赖而对每个 `tcId` 最多记录第一项。
 
 ### 9.2 全部通过
 
@@ -592,7 +592,7 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 119 项测试：
+当前共有 125 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -607,11 +607,12 @@ python -m unittest discover -s tests -v
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
 - 5 项批量向量执行与汇总测试
+- 6 项 ACVP 风格请求与响应适配器测试
 
 当前预期结果：
 
 ```text
-Ran 119 tests in ...
+Ran 125 tests in ...
 
 OK
 ```
@@ -842,8 +843,8 @@ git commit -m "描述本次修改"
 1. 提取 SM3、SM4 公共的 JSON、OpenSSL 和错误处理模块。
 2. 使用 OpenSSL EVP API 编写 C 语言后端。
 3. 使用同一批向量交叉验证 Python 和 C 后端。
-4. 为交叉后端不一致报告增加可继续执行剩余用例的收集模式。
+4. 将本地 ACVP 风格字段逐步映射到正式算法规范中的 testType 和参数集。
 5. 为 HMAC-SM3 增加独立正式标准向量。
 6. 研究流式大文件处理、操作系统密钥库和标准化认证加密容器。
 7. 增加 SM2 密钥生成、签名、验签和加解密实验。
-8. 逐步适配更接近 ACVP 的 JSON 能力描述与结果格式。
+8. 在具备授权和合规条件后，另行研究 ACVTS 注册、会话和传输流程。

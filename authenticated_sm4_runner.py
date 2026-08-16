@@ -109,6 +109,7 @@ def run_tests(
     decrypt_fn: DecryptFunction = authenticated_sm4.verify_and_decrypt,
     output: TextIO = sys.stdout,
     results: list[dict[str, Any]] | None = None,
+    mismatches: list[dict[str, Any]] | None = None,
 ) -> int:
     passed = 0
     for test in tests:
@@ -128,7 +129,24 @@ def run_tests(
                 error.set_test_context(
                     test["tcId"], algorithm=authenticated_sm4.ALGORITHM
                 )
-            raise
+            if mismatches is None or not hasattr(error, "as_error_detail"):
+                raise
+            backend_mismatch = error.as_error_detail()
+            mismatches.append(backend_mismatch)
+            if results is not None:
+                results.append(
+                    {
+                        "tcId": test["tcId"],
+                        "status": "failed",
+                        "backendMismatch": backend_mismatch,
+                    }
+                )
+            print(f"[FAIL] backend mismatch: {error}", file=sys.stderr)
+            print(
+                f"[FAIL] tcId={test['tcId']} algorithm={authenticated_sm4.ALGORITHM}",
+                file=output,
+            )
+            continue
         actual_pt = recovered.hex()
         matches = (
             actual_package["ciphertext"] == test["ct"]
