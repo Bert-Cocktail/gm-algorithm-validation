@@ -198,7 +198,7 @@ cd C:\Users\16256\Documents\密码学\gm-algorithm-validation
 python runner.py --help
 ```
 
-统一命令格式：
+单文件命令格式：
 
 ```powershell
 python runner.py <测试向量文件> [--backend openssl|gmssl|cross] [--openssl <openssl.exe路径>] [--result-json <结果文件>]
@@ -221,6 +221,20 @@ python runner.py vectors\sm3.json --backend cross --result-json results\sm3-cros
 ```
 
 该选项不改变终端 PASS/FAIL 输出或退出码。结果 JSON 使用 UTF-8 和原子替换写入；已有结果文件会更新，但程序拒绝让结果路径与输入向量路径相同。
+
+批量运行全部向量：
+
+```powershell
+python runner.py --all --backend cross --result-dir results
+```
+
+默认扫描项目 `vectors` 目录中的所有 `*.json`。需要指定其他向量目录时使用：
+
+```powershell
+python runner.py --all --vector-dir other-vectors --backend cross --result-dir results
+```
+
+结果目录会自动创建，并且不得与向量目录相同。每个向量文件生成 `<向量名>-<后端>.json`，同时生成 `summary.json`。某个文件失败或输入无效不会阻止后续文件运行。
 
 普通用户计算 SM3 时使用：
 
@@ -578,7 +592,7 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 114 项测试：
+当前共有 119 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -592,11 +606,12 @@ python -m unittest discover -s tests -v
 - 7 项 OpenSSL/GmSSL 交叉验证测试
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
+- 5 项批量向量执行与汇总测试
 
 当前预期结果：
 
 ```text
-Ran 114 tests in ...
+Ran 119 tests in ...
 
 OK
 ```
@@ -644,6 +659,8 @@ python -m unittest tests.test_runner_dispatch -v
 | `run_document()` | 根据算法名称分派 SM3、HMAC-SM3、SM4 或认证 SM4 |
 | `_build_report()` | 构造统一的结果报告对象 |
 | `_write_json_atomic()` | 原子写入 UTF-8 JSON 结果文件 |
+| `_run_all()` | 发现并逐个运行向量目录中的 JSON 文件 |
+| `_build_batch_summary()` | 汇总逐文件状态、退出码和测试数量 |
 | `main()` | 统一程序入口和错误处理 |
 
 ### 11.2 `gmcrypto.py`
@@ -804,6 +821,7 @@ python runner.py vectors\sm3.json
 python runner.py vectors\hmac-sm3.json
 python runner.py vectors\sm4-ctr-hmac-sm3.json
 python runner.py vectors\sm4.json
+python runner.py --all --backend cross --result-dir results
 python -m unittest discover -s tests -v
 git diff --check
 git status

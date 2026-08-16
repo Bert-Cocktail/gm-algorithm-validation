@@ -93,7 +93,7 @@ HMAC-SM3 的分组长度为 64 byte。1 byte 全零密钥会补零到 64 byte，
 全仓库测试结果：
 
 ```text
-Ran 114 tests in ...
+Ran 119 tests in ...
 
 OK
 ```

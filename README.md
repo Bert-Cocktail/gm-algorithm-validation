@@ -49,6 +49,7 @@
 - `runner.py` 支持 `openssl`、`gmssl` 和 `cross` 三种后端
 - `cross` 会逐项比较 OpenSSL 与 GmSSL，任何不一致都返回测试失败
 - 统一入口可使用 `--result-json` 输出便于归档和程序分析的结构化报告
+- `--all` 可批量运行全部向量，生成逐文件报告和总汇 `summary.json`
 
 两个执行器都会输出每个测试用例的 PASS/FAIL，并区分测试失败与输入、环境错误。
 
@@ -79,6 +80,7 @@ gm-algorithm-validation/
 │   ├── test_authenticated_sm4_runner.py
 │   ├── test_cross_validation.py
 │   ├── test_runner_backends.py
+│   ├── test_runner_batch.py
 │   ├── test_sm4.py
 │   ├── test_gmcrypto.py
 │   └── test_runner_dispatch.py
@@ -89,6 +91,7 @@ gm-algorithm-validation/
 │   ├── hmac-sm3-experiment.md
 │   ├── authenticated-sm4-experiment.md
 │   ├── cross-validation.md
+│   ├── batch-validation.md
 │   └── sm4-experiment.md
 └── results/
 ```
@@ -243,6 +246,14 @@ python runner.py vectors\sm3.json --backend cross --result-json results\sm3-cros
 
 终端仍显示原有 PASS/FAIL；结果文件记录算法、后端、退出码、汇总以及每个 `tcId` 的 expected/actual。后端不一致会精确记录当前 `tcId`、operation、OpenSSL 结果和 GmSSL 结果；SM4 还记录模式与方向。结果文件采用同目录临时文件原子写入，并拒绝覆盖输入向量文件。
 
+批量运行全部向量并生成报告：
+
+```powershell
+python runner.py --all --backend cross --result-dir results
+```
+
+程序按文件名顺序运行 `vectors\*.json`。单个文件失败或输入错误时仍继续处理其余文件，最终生成四个逐文件报告和 [summary.json](results/summary.json)。批量退出码优先级为输入/环境错误 `2`、测试失败 `1`、全部通过 `0`。
+
 - `openssl`：默认后端，只运行 OpenSSL。
 - `gmssl`：只运行 Python gmssl，不要求 OpenSSL 在 `PATH`。
 - `cross`：两套后端都运行，并要求每次密码运算结果一致。
@@ -272,7 +283,7 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 114 项测试：
+当前共有 119 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -286,11 +297,12 @@ python -m unittest discover -s tests -v
 - 7 项 OpenSSL/GmSSL 交叉验证测试
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
+- 5 项批量向量执行与汇总测试
 
 本次实测结果：
 
 ```text
-Ran 114 tests in ...
+Ran 119 tests in ...
 
 OK
 ```

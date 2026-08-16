@@ -83,7 +83,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
-        "vector_file", type=Path, help="path to a supported JSON vector file"
+        "vector_file",
+        type=Path,
+        nargs="?",
+        help="path to a supported JSON vector file",
+    )
+    parser.add_argument(
+        "--all", action="store_true", help="run every JSON file in the vector directory"
+    )
+    parser.add_argument(
+        "--vector-dir",
+        type=Path,
+        default=Path(__file__).resolve().parent / "vectors",
+        help="directory searched by --all (default: project vectors directory)",
     )
     parser.add_argument(
         "--backend",
@@ -101,7 +113,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="write a structured JSON test report to this path",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--result-dir",
+        type=Path,
+        help="directory for per-vector reports and summary.json with --all",
+    )
+    args = parser.parse_args(argv)
+    if args.all == (args.vector_file is not None):
+        parser.error("provide exactly one vector_file or --all")
+    if args.all and args.result_json is not None:
+        parser.error("--result-json cannot be used together with --all")
+    if not args.all and args.result_dir is not None:
+        parser.error("--result-dir can only be used together with --all")
+    if args.all and args.result_dir is None:
+        parser.error("--all requires --result-dir")
+    return args
 
 
 def _load_gmssl_backend() -> Any:
@@ -531,18 +557,11 @@ def _build_report(
     return report
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = parse_args(argv)
+def _execute_single(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     test_results: list[dict[str, Any]] = []
     algorithm: str | None = None
     error_detail: dict[str, Any] | None = None
-    result_path_is_vector = (
-        args.result_json is not None
-        and args.result_json.resolve() == args.vector_file.resolve()
-    )
     try:
-        if result_path_is_vector:
-            raise RunnerError("result JSON path must not overwrite the vector file")
         document = load_document(args.vector_file)
         raw_algorithm = document.get("algorithm")
         algorithm = str(raw_algorithm).upper() if raw_algorithm is not None else None
@@ -566,10 +585,143 @@ def main(argv: Sequence[str] | None = None) -> int:
         exit_code = EXIT_INPUT_ERROR
         error_detail = {"type": "input_error", "message": str(error)}
 
-    if args.result_json is not None and not result_path_is_vector:
-        report = _build_report(
-            args, algorithm, test_results, exit_code, error_detail
-        )
+    return exit_code, _build_report(
+        args, algorithm, test_results, exit_code, error_detail
+    )
+
+
+def _batch_exit_code(reports: list[dict[str, Any]]) -> int:
+    codes = {report["exitCode"] for report in reports}
+    if EXIT_INPUT_ERROR in codes:
+        return EXIT_INPUT_ERROR
+    if EXIT_TEST_FAILURE in codes:
+        return EXIT_TEST_FAILURE
+    return EXIT_SUCCESS
+
+
+def _build_batch_summary(
+    args: argparse.Namespace,
+    reports: list[dict[str, Any]],
+    result_files: list[Path],
+) -> dict[str, Any]:
+    exit_code = _batch_exit_code(reports)
+    passed_files = sum(report["status"] == "passed" for report in reports)
+    failed_files = sum(report["status"] == "failed" for report in reports)
+    error_files = sum(report["status"] == "error" for report in reports)
+    test_summaries = [report["summary"] for report in reports if report["summary"]]
+    files: list[dict[str, Any]] = []
+    for report, result_file in zip(reports, result_files):
+        item: dict[str, Any] = {
+            "vectorFile": report["vectorFile"],
+            "resultFile": str(result_file.resolve()),
+            "algorithm": report["algorithm"],
+            "status": report["status"],
+            "exitCode": report["exitCode"],
+            "summary": report["summary"],
+        }
+        if "error" in report:
+            item["error"] = report["error"]
+        files.append(item)
+
+    return {
+        "schemaVersion": 1,
+        "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "backend": args.backend,
+        "vectorDirectory": str(args.vector_dir.resolve()),
+        "resultDirectory": str(args.result_dir.resolve()),
+        "status": (
+            "passed" if exit_code == EXIT_SUCCESS
+            else "failed" if exit_code == EXIT_TEST_FAILURE
+            else "error"
+        ),
+        "exitCode": exit_code,
+        "summary": {
+            "files": len(reports),
+            "passedFiles": passed_files,
+            "failedFiles": failed_files,
+            "errorFiles": error_files,
+            "tests": sum(summary["total"] for summary in test_summaries),
+            "passedTests": sum(summary["passed"] for summary in test_summaries),
+            "failedTests": sum(summary["failed"] for summary in test_summaries),
+        },
+        "files": files,
+    }
+
+
+def _run_all(args: argparse.Namespace) -> int:
+    if not args.vector_dir.exists() or not args.vector_dir.is_dir():
+        print(f"Error: vector directory not found: {args.vector_dir}", file=sys.stderr)
+        return EXIT_INPUT_ERROR
+    if args.result_dir.resolve() == args.vector_dir.resolve():
+        print("Error: result directory must differ from vector directory", file=sys.stderr)
+        return EXIT_INPUT_ERROR
+    vector_files = sorted(args.vector_dir.glob("*.json"), key=lambda path: path.name.lower())
+    if not vector_files:
+        print(f"Error: no JSON vector files found in: {args.vector_dir}", file=sys.stderr)
+        return EXIT_INPUT_ERROR
+    try:
+        args.result_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        print(f"Error: failed to create result directory: {error}", file=sys.stderr)
+        return EXIT_INPUT_ERROR
+
+    reports: list[dict[str, Any]] = []
+    result_files: list[Path] = []
+    for vector_file in vector_files:
+        print(f"\n=== {vector_file.name} ===")
+        single_args = argparse.Namespace(**vars(args))
+        single_args.vector_file = vector_file
+        single_args.result_json = None
+        exit_code, report = _execute_single(single_args)
+        result_file = args.result_dir / f"{vector_file.stem}-{args.backend}.json"
+        try:
+            _write_json_atomic(result_file, report)
+        except RunnerError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            report = {
+                **report,
+                "status": "error",
+                "exitCode": EXIT_INPUT_ERROR,
+                "summary": None,
+                "error": {"type": "result_output_error", "message": str(error)},
+            }
+            exit_code = EXIT_INPUT_ERROR
+        reports.append(report)
+        result_files.append(result_file)
+
+    summary = _build_batch_summary(args, reports, result_files)
+    try:
+        _write_json_atomic(args.result_dir / "summary.json", summary)
+    except RunnerError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return EXIT_INPUT_ERROR
+
+    counts = summary["summary"]
+    print(
+        "\nBatch total: "
+        f"Files={counts['files']}, Passed={counts['passedFiles']}, "
+        f"Failed={counts['failedFiles']}, Errors={counts['errorFiles']}, "
+        f"Tests={counts['tests']}"
+    )
+    return summary["exitCode"]
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+    if args.all:
+        return _run_all(args)
+
+    result_path_is_vector = (
+        args.result_json is not None
+        and args.result_json.resolve() == args.vector_file.resolve()
+    )
+    if result_path_is_vector:
+        print("Error: result JSON path must not overwrite the vector file", file=sys.stderr)
+        return EXIT_INPUT_ERROR
+
+    exit_code, report = _execute_single(args)
+
+    if args.result_json is not None:
         try:
             _write_json_atomic(args.result_json, report)
         except RunnerError as error:
