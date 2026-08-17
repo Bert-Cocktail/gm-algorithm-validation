@@ -30,7 +30,11 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       - name: Run all regression vectors
-        run: python runner.py --all --backend cross --result-dir results
+        run: |
+          if ! python runner.py --all --backend cross --result-dir results; then
+            python -c "import json; data=json.load(open('results/summary.json', encoding='utf-8')); print('::error title=Regression vector summary::' + json.dumps(data, separators=(',', ':')))"
+            exit 1
+          fi
 
       - name: Process and verify ACVP-style requests
         run: |
