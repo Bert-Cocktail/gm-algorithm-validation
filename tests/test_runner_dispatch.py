@@ -44,11 +44,23 @@ class TestUnifiedRunner(unittest.TestCase):
 
         self.assertEqual(result, runner.EXIT_SUCCESS)
 
+    def test_dispatches_sm2_vector_file(self) -> None:
+        with redirect_stdout(io.StringIO()):
+            result = runner.main(
+                [
+                    str(PROJECT_ROOT / "vectors" / "sm2.json"),
+                    "--backend",
+                    "gmssl",
+                ]
+            )
+
+        self.assertEqual(result, runner.EXIT_SUCCESS)
+
     def test_rejects_unsupported_algorithm(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "unsupported.json"
             path.write_text(
-                json.dumps({"algorithm": "SM2", "testGroups": []}),
+                json.dumps({"algorithm": "SM9", "testGroups": []}),
                 encoding="utf-8",
             )
 

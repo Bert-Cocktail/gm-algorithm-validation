@@ -1,10 +1,22 @@
 # GM Algorithm Validation Lab
 
-这是一个面向国密算法学习的实验仓库。项目调用 OpenSSL 完成密码运算，支持 SM3、HMAC-SM3 和 SM4 实验，并按照“读取测试向量、校验输入、执行算法、比较预期结果、输出 PASS/FAIL”的流程进行验证。
+这是一个面向国密算法学习的实验仓库。项目调用 OpenSSL 完成密码运算，支持 SM2、SM3、HMAC-SM3 和 SM4 实验，并按照“读取测试向量、校验输入、执行算法、比较预期结果、输出 PASS/FAIL”的流程进行验证。
 
 项目不从零实现密码算法，也不以替代 GmSSL 为目标。当前重点是建立可复现、可测试、可继续扩展的国密算法实验框架。
 
 ## 当前功能
+
+### SM2
+
+- 验证 `sm2p256v1` 曲线上的 SM2 DER 签名
+- 校验用户 ID、消息长度、未压缩公钥和签名编码
+- 使用 OpenSSL 与 Python GmSSL 对 6 个正、负向量交叉验证
+- 统一 `runner.py` 支持单文件、批量和结构化 SM2 结果
+- `gmcrypto.py` 支持生成 PEM 密钥对、文件签名和验签
+- 支持 PEM 公钥加密、PEM 私钥解密，密文可选 DER、C1C3C2 或 C1C2C3
+- 支持三种 SM2 密文格式严格解析和相互转换，并验证 C3 完整性
+- 新增加解密回环、篡改拒绝和公开附录格式转换向量
+- 私钥、公钥和签名均通过文件读写，不通过命令行传递私钥
 
 ### SM3
 
@@ -44,7 +56,7 @@
 ### GmSSL 独立交叉验证
 
 - 使用 Python `gmssl 3.2.2` 作为第二套密码原语实现
-- 交叉验证全部 53 个 SM3、HMAC-SM3、SM4 和认证组合向量
+- 交叉验证全部 64 个 SM2、SM3、HMAC-SM3、SM4 和认证组合向量
 - 使用 GmSSL 原始 SM4 分组接口组合无 padding ECB、CBC 和 CTR
 - `runner.py` 支持 `openssl`、`gmssl` 和 `cross` 三种后端
 - `cross` 会逐项比较 OpenSSL 与 GmSSL，任何不一致都返回测试失败
@@ -69,7 +81,7 @@
 
 两个执行器都会输出每个测试用例的 PASS/FAIL，并区分测试失败与输入、环境错误。
 
-当前尚未实现：C API、padding、生产级认证文件格式、SM2、性能测试和 ACVTS 网络接入。ACVP 风格适配器是本地格式实验，不是 ACVTS 客户端或认证结果。
+当前尚未实现：C API、padding、生产级认证文件格式、SM2 的 ACVP 风格请求、性能测试和 ACVTS 网络接入。ACVP 风格适配器是本地格式实验，不是 ACVTS 客户端或认证结果。
 
 ## 项目结构
 
@@ -85,10 +97,15 @@ gm-algorithm-validation/
 ├── authenticated_sm4.py
 ├── authenticated_sm4_runner.py
 ├── gmssl_backend.py
+├── sm2_runner.py
+├── sm2_cipher.py
+├── sm2_encryption_runner.py
 ├── sm4_runner.py
 ├── requirements-dev.txt
 ├── vectors/
 │   ├── sm3.json
+│   ├── sm2.json
+│   ├── sm2-encryption.json
 │   ├── hmac-sm3.json
 │   ├── sm4-ctr-hmac-sm3.json
 │   └── sm4.json
@@ -183,6 +200,26 @@ python gmcrypto.py sm3 --file examples\message.txt
 
 三种方式都输出 64 个十六进制字符的 SM3 摘要。`--text` 默认使用 UTF-8，可通过 `--encoding` 指定其他文本编码；`--file` 由 OpenSSL 直接读取，Python 不会把整个文件载入内存。
 
+生成 SM2 PEM 密钥对、签名并验签：
+
+```powershell
+python gmcrypto.py sm2-keygen --private-key sm2-private.pem --public-key sm2-public.pem --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+python gmcrypto.py sm2-sign --private-key sm2-private.pem --input examples\message.txt --signature message.sig --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+python gmcrypto.py sm2-verify --public-key sm2-public.pem --input examples\message.txt --signature message.sig --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+```
+
+验签成功输出 `OK` 和退出码 `0`，签名不匹配输出 `FAIL` 和退出码 `1`。默认用户 ID 为 `1234567812345678`；签名和验签需要使用相同的 `--user-id`。PEM 私钥应放在仓库外并限制访问。
+
+使用公钥加密、转换密文格式并用私钥解密：
+
+```powershell
+python gmcrypto.py sm2-encrypt --public-key sm2-public.pem --input examples\message.txt --output message.sm2 --format c1c3c2 --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+python gmcrypto.py sm2-convert --input message.sm2 --output message.der --from-format c1c3c2 --to-format der
+python gmcrypto.py sm2-decrypt --private-key sm2-private.pem --input message.der --output recovered.txt --format der --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+```
+
+SM2 加密带有随机性，同一明文每次密文通常不同。`C3` 是完整性校验值；校验失败时不会写出明文。已有输出默认拒绝覆盖，需要替换时使用 `--force`。
+
 生成随机的 32 byte HMAC 密钥文件：
 
 ```powershell
@@ -260,7 +297,14 @@ python runner.py vectors\sm3.json
 Total: 15, Passed: 15, Failed: 0
 ```
 
-统一入口会根据 JSON 中的 `algorithm` 字段自动选择 SM3、HMAC-SM3、SM4 或 SM4-CTR-HMAC-SM3。运行 SM4 向量：
+统一入口会根据 JSON 中的 `algorithm` 字段自动选择 SM2、SM2-ENCRYPTION、SM3、HMAC-SM3、SM4 或 SM4-CTR-HMAC-SM3。运行 SM2 向量：
+
+```powershell
+python runner.py vectors\sm2.json --backend cross --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+python runner.py vectors\sm2-encryption.json --backend cross --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+```
+
+运行 SM4 向量：
 
 ```powershell
 python runner.py vectors\sm4.json
@@ -377,15 +421,18 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 146 项测试：
+当前共有 183 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
+- 24 项 SM2 执行器与编码测试
+- 7 项 SM2 加密、解密和格式转换测试
+- 5 项普通用户 SM2 CLI 测试
 - 7 项普通用户 SM3 CLI 测试
 - 13 项 HMAC-SM3 CLI 测试
 - 8 项普通用户认证加密 CLI 测试
 - 8 项 HMAC-SM3 向量执行器测试
-- 5 项统一入口分派测试
+- 6 项统一入口分派测试
 - 21 项认证 SM4 格式、加解密与篡改测试
 - 6 项认证 SM4 向量执行器测试
 - 7 项 OpenSSL/GmSSL 交叉验证测试
@@ -400,7 +447,7 @@ python -m unittest discover -s tests -v
 本次实测结果：
 
 ```text
-Ran 146 tests in ...
+Ran 183 tests in ...
 
 OK
 ```
@@ -478,10 +525,13 @@ SM4 测试用例示例：
 - 认证加密密钥文件包含明文十六进制密钥，必须保存在仓库外并限制访问；程序不会代替操作系统密钥库。
 - 认证加密输入文件和 JSON 包限制为 64 MiB，当前实现会把内容读入内存。
 - HMAC-SM3 推荐使用仓库外的原始二进制 `.hmackey` 文件；`--key-hex` 仅为兼容保留，会进入命令历史和进程参数。
+- SM2 私钥 PEM 和签名文件默认由 `.gitignore` 排除；私钥仍应存放在仓库外并设置适当文件权限。
+- SM2 用户 ID 是签名计算的一部分，签名与验签必须使用相同 ID。
+- 当前 SM2 普通用户功能依赖支持 SM2 签名的 OpenSSL；本机旧 OpenSSL 1.1.1i 构建不可用，可通过 `--openssl` 指定 OpenSSL 3。
 
 ## 下一步计划
 
 1. 使用 OpenSSL EVP API 编写 C 语言 SM3、SM4 程序。
 2. 让同一批 JSON 向量验证命令行后端和 C 后端。
 3. 研究操作系统密钥库、流式大文件处理和标准化认证加密格式。
-4. 继续开展 SM2 实验，并使用 OpenSSL/GmSSL 交叉验证。
+4. 继续开展 SM2 公钥加密、私钥解密以及 C1C3C2/C1C2C3 格式实验。

@@ -22,7 +22,7 @@ python runner.py --all --vector-dir vectors --backend cross --result-dir results
 
 ## 输出文件
 
-当前 4 个向量文件会产生：
+当前 6 个向量文件会产生：
 
 ```text
 results/
@@ -48,8 +48,8 @@ results/
     "passedFiles": 4,
     "failedFiles": 0,
     "errorFiles": 0,
-    "tests": 53,
-    "passedTests": 53,
+    "tests": 64,
+    "passedTests": 64,
     "failedTests": 0
   },
   "files": []
@@ -72,7 +72,7 @@ results/
 
 新增 5 项批量运行测试：
 
-- 四个正式向量文件生成逐文件报告与总汇。
+- 六个向量文件生成逐文件报告与总汇。
 - 测试结果失败后继续执行后续文件。
 - 输入错误后继续执行，并使总退出码为 `2`。
 - GmSSL 批量模式不查找 OpenSSL。
@@ -81,11 +81,11 @@ results/
 全仓库测试结果：
 
 ```text
-Ran 146 tests in ...
+Ran 183 tests in ...
 
 OK
 ```
 
 ## 当前结果
 
-当前批量交叉验证覆盖 53 个向量：SM3 15 个、HMAC-SM3 4 个、SM4 28 个、认证组合 6 个。四个文件均通过 OpenSSL 1.1.1i 与 Python gmssl 3.2.2 交叉验证。
+当前批量交叉验证覆盖 64 个向量：SM2 签名 6 个、SM2 加密与格式 5 个、SM3 15 个、HMAC-SM3 4 个、SM4 28 个、认证组合 6 个。六个文件均通过对应 OpenSSL 后端与 Python gmssl 3.2.2 验证；SM2 使用支持签名和加密接口的 OpenSSL 3。

@@ -18,6 +18,8 @@ from typing import TextIO
 import runner
 import authenticated_sm4
 import hmac_sm3_runner
+import sm2_runner
+import sm2_cipher
 
 
 EXIT_SUCCESS = 0
@@ -128,6 +130,74 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     decrypt_parser.add_argument("--output", type=Path, required=True)
     decrypt_parser.add_argument("--force", action="store_true")
     decrypt_parser.add_argument("--openssl", default="openssl")
+
+    sm2_keygen_parser = commands.add_parser(
+        "sm2-keygen", help="generate an SM2 PEM private/public key pair"
+    )
+    sm2_keygen_parser.add_argument("--private-key", type=Path, required=True)
+    sm2_keygen_parser.add_argument("--public-key", type=Path, required=True)
+    sm2_keygen_parser.add_argument("--force", action="store_true")
+    sm2_keygen_parser.add_argument("--openssl", default="openssl")
+
+    sm2_sign_parser = commands.add_parser(
+        "sm2-sign", help="sign a file with an SM2 PEM private key"
+    )
+    sm2_sign_parser.add_argument("--private-key", type=Path, required=True)
+    sm2_sign_parser.add_argument("--input", type=Path, required=True)
+    sm2_sign_parser.add_argument("--signature", type=Path, required=True)
+    sm2_sign_parser.add_argument(
+        "--user-id", default="1234567812345678", help="SM2 signer ID"
+    )
+    sm2_sign_parser.add_argument("--force", action="store_true")
+    sm2_sign_parser.add_argument("--openssl", default="openssl")
+
+    sm2_verify_parser = commands.add_parser(
+        "sm2-verify", help="verify an SM2 DER signature for a file"
+    )
+    sm2_verify_parser.add_argument("--public-key", type=Path, required=True)
+    sm2_verify_parser.add_argument("--input", type=Path, required=True)
+    sm2_verify_parser.add_argument("--signature", type=Path, required=True)
+    sm2_verify_parser.add_argument(
+        "--user-id", default="1234567812345678", help="SM2 signer ID"
+    )
+    sm2_verify_parser.add_argument("--openssl", default="openssl")
+
+    sm2_encrypt_parser = commands.add_parser(
+        "sm2-encrypt", help="encrypt a file with an SM2 PEM public key"
+    )
+    sm2_encrypt_parser.add_argument("--public-key", type=Path, required=True)
+    sm2_encrypt_parser.add_argument("--input", type=Path, required=True)
+    sm2_encrypt_parser.add_argument("--output", type=Path, required=True)
+    sm2_encrypt_parser.add_argument(
+        "--format", choices=sorted(sm2_cipher.SUPPORTED_FORMATS), default="der"
+    )
+    sm2_encrypt_parser.add_argument("--force", action="store_true")
+    sm2_encrypt_parser.add_argument("--openssl", default="openssl")
+
+    sm2_decrypt_parser = commands.add_parser(
+        "sm2-decrypt", help="decrypt an SM2 ciphertext with a PEM private key"
+    )
+    sm2_decrypt_parser.add_argument("--private-key", type=Path, required=True)
+    sm2_decrypt_parser.add_argument("--input", type=Path, required=True)
+    sm2_decrypt_parser.add_argument("--output", type=Path, required=True)
+    sm2_decrypt_parser.add_argument(
+        "--format", choices=sorted(sm2_cipher.SUPPORTED_FORMATS), default="der"
+    )
+    sm2_decrypt_parser.add_argument("--force", action="store_true")
+    sm2_decrypt_parser.add_argument("--openssl", default="openssl")
+
+    sm2_convert_parser = commands.add_parser(
+        "sm2-convert", help="convert an SM2 ciphertext between DER, C1C3C2, and C1C2C3"
+    )
+    sm2_convert_parser.add_argument("--input", type=Path, required=True)
+    sm2_convert_parser.add_argument("--output", type=Path, required=True)
+    sm2_convert_parser.add_argument(
+        "--from-format", choices=sorted(sm2_cipher.SUPPORTED_FORMATS), required=True
+    )
+    sm2_convert_parser.add_argument(
+        "--to-format", choices=sorted(sm2_cipher.SUPPORTED_FORMATS), required=True
+    )
+    sm2_convert_parser.add_argument("--force", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -377,6 +447,243 @@ def run_hmac_sm3(args: argparse.Namespace, openssl: str) -> tuple[str, bool | No
     return actual, hmac.compare_digest(actual, expected)
 
 
+def validate_sm2_user_id(value: str) -> str:
+    encoded = value.encode("utf-8")
+    if not encoded:
+        raise UserInputError("--user-id must not be empty")
+    if len(encoded) > 8191:
+        raise UserInputError("--user-id is too long for the SM2 ENTL field")
+    if "\x00" in value:
+        raise UserInputError("--user-id must not contain NUL characters")
+    return value
+
+
+def run_openssl_command(command: list[str], operation: str) -> subprocess.CompletedProcess[bytes]:
+    try:
+        process = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except OSError as error:
+        raise UserInputError(f"failed to run OpenSSL {operation}: {error}") from error
+    return process
+
+
+def require_openssl_success(
+    process: subprocess.CompletedProcess[bytes], operation: str
+) -> None:
+    if process.returncode != 0:
+        detail = (process.stdout + process.stderr).decode(
+            "utf-8", errors="replace"
+        ).strip()
+        raise UserInputError(f"OpenSSL {operation} failed: {detail or 'unknown error'}")
+
+
+def run_sm2_keygen(args: argparse.Namespace, openssl: str) -> None:
+    if args.private_key.resolve() == args.public_key.resolve():
+        raise UserInputError("private and public key paths must be different")
+    for path in (args.private_key, args.public_key):
+        if not path.parent.exists() or not path.parent.is_dir():
+            raise UserInputError(f"output directory not found: {path.parent}")
+        if path.exists() and not args.force:
+            raise UserInputError(
+                f"output file already exists: {path} (use --force to replace it)"
+            )
+
+    with tempfile.TemporaryDirectory(prefix="sm2-keygen-") as directory_name:
+        directory = Path(directory_name)
+        private_temp = directory / "private.pem"
+        public_temp = directory / "public.pem"
+        message_temp = directory / "self-test-message.bin"
+        signature_temp = directory / "self-test-signature.der"
+        require_openssl_success(
+            run_openssl_command(
+                [
+                    openssl,
+                    "genpkey",
+                    "-algorithm",
+                    "EC",
+                    "-pkeyopt",
+                    "ec_paramgen_curve:SM2",
+                    "-out",
+                    str(private_temp),
+                ],
+                "SM2 key generation",
+            ),
+            "SM2 key generation",
+        )
+        require_openssl_success(
+            run_openssl_command(
+                [
+                    openssl,
+                    "pkey",
+                    "-in",
+                    str(private_temp),
+                    "-pubout",
+                    "-out",
+                    str(public_temp),
+                ],
+                "SM2 public-key export",
+            ),
+            "SM2 public-key export",
+        )
+        message_temp.write_bytes(b"")
+        require_openssl_success(
+            run_openssl_command(
+                [
+                    openssl,
+                    "dgst",
+                    "-sm3",
+                    "-sign",
+                    str(private_temp),
+                    "-sigopt",
+                    "distid:1234567812345678",
+                    "-out",
+                    str(signature_temp),
+                    str(message_temp),
+                ],
+                "SM2 key self-test",
+            ),
+            "SM2 key self-test",
+        )
+        require_openssl_success(
+            run_openssl_command(
+                [
+                    openssl,
+                    "dgst",
+                    "-sm3",
+                    "-verify",
+                    str(public_temp),
+                    "-signature",
+                    str(signature_temp),
+                    "-sigopt",
+                    "distid:1234567812345678",
+                    str(message_temp),
+                ],
+                "SM2 key self-test verification",
+            ),
+            "SM2 key self-test verification",
+        )
+        write_atomic(
+            args.private_key, private_temp.read_bytes(), force=args.force
+        )
+        write_atomic(args.public_key, public_temp.read_bytes(), force=args.force)
+
+
+def run_sm2_sign(args: argparse.Namespace, openssl: str) -> None:
+    validate_sm2_user_id(args.user_id)
+    read_limited_file(args.private_key, "SM2 private key")
+    read_limited_file(args.input, "input file")
+    with tempfile.TemporaryDirectory(prefix="sm2-sign-") as directory_name:
+        signature_temp = Path(directory_name) / "signature.der"
+        process = run_openssl_command(
+            [
+                openssl,
+                "dgst",
+                "-sm3",
+                "-sign",
+                str(args.private_key.resolve()),
+                "-sigopt",
+                f"distid:{args.user_id}",
+                "-out",
+                str(signature_temp),
+                str(args.input.resolve()),
+            ],
+            "SM2 signing",
+        )
+        require_openssl_success(process, "SM2 signing")
+        signature = signature_temp.read_bytes()
+    try:
+        sm2_runner.der_signature_to_raw(signature)
+    except sm2_runner.RunnerError as error:
+        raise UserInputError(f"OpenSSL returned an invalid SM2 signature: {error}") from error
+    write_atomic(args.signature, signature, force=args.force)
+
+
+def run_sm2_verify(args: argparse.Namespace, openssl: str) -> bool:
+    validate_sm2_user_id(args.user_id)
+    read_limited_file(args.public_key, "SM2 public key")
+    read_limited_file(args.input, "input file")
+    signature = read_limited_file(args.signature, "SM2 signature")
+    try:
+        sm2_runner.der_signature_to_raw(signature)
+    except sm2_runner.RunnerError as error:
+        raise UserInputError(f"invalid SM2 DER signature: {error}") from error
+    process = run_openssl_command(
+        [
+            openssl,
+            "dgst",
+            "-sm3",
+            "-verify",
+            str(args.public_key.resolve()),
+            "-signature",
+            str(args.signature.resolve()),
+            "-sigopt",
+            f"distid:{args.user_id}",
+            str(args.input.resolve()),
+        ],
+        "SM2 verification",
+    )
+    output = (process.stdout + process.stderr).decode("utf-8", errors="replace")
+    if process.returncode == 0:
+        return True
+    if process.returncode == 1 and "verification failure" in output.lower():
+        return False
+    raise UserInputError(
+        f"OpenSSL SM2 verification failed: {output.strip() or 'unknown error'}"
+    )
+
+
+def run_sm2_encrypt(args: argparse.Namespace, openssl: str) -> None:
+    read_limited_file(args.public_key, "SM2 public key")
+    plaintext = read_limited_file(args.input, "plaintext file")
+    if not plaintext:
+        raise UserInputError("SM2 plaintext file must not be empty")
+    process = run_openssl_command(
+        [openssl, "pkeyutl", "-encrypt", "-pubin", "-inkey", str(args.public_key.resolve()),
+         "-in", str(args.input.resolve())],
+        "SM2 encryption",
+    )
+    require_openssl_success(process, "SM2 encryption")
+    try:
+        ciphertext = sm2_cipher.convert_ciphertext(process.stdout, "der", args.format)
+    except sm2_cipher.CipherError as error:
+        raise UserInputError(f"OpenSSL returned an invalid SM2 ciphertext: {error}") from error
+    write_atomic(args.output, ciphertext, force=args.force)
+
+
+def run_sm2_decrypt(args: argparse.Namespace, openssl: str) -> None:
+    read_limited_file(args.private_key, "SM2 private key")
+    ciphertext = read_limited_file(args.input, "SM2 ciphertext")
+    try:
+        ciphertext_der = sm2_cipher.convert_ciphertext(ciphertext, args.format, "der")
+    except sm2_cipher.CipherError as error:
+        raise UserInputError(f"invalid SM2 ciphertext: {error}") from error
+    with tempfile.TemporaryDirectory(prefix="sm2-decrypt-") as directory_name:
+        ciphertext_path = Path(directory_name) / "ciphertext.der"
+        ciphertext_path.write_bytes(ciphertext_der)
+        process = run_openssl_command(
+            [openssl, "pkeyutl", "-decrypt", "-inkey", str(args.private_key.resolve()),
+             "-in", str(ciphertext_path)],
+            "SM2 decryption",
+        )
+    require_openssl_success(process, "SM2 decryption")
+    write_atomic(args.output, process.stdout, force=args.force)
+
+
+def run_sm2_convert(args: argparse.Namespace) -> None:
+    ciphertext = read_limited_file(args.input, "SM2 ciphertext")
+    try:
+        converted = sm2_cipher.convert_ciphertext(
+            ciphertext, args.from_format, args.to_format
+        )
+    except sm2_cipher.CipherError as error:
+        raise UserInputError(f"invalid SM2 ciphertext: {error}") from error
+    write_atomic(args.output, converted, force=args.force)
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -391,6 +698,16 @@ def main(
             return EXIT_SUCCESS
         if args.command == "generate-hmac-key":
             run_generate_hmac_key(args)
+            print(args.output, file=output)
+            return EXIT_SUCCESS
+        if args.command == "sm2-keygen":
+            openssl = runner.resolve_openssl(args.openssl)
+            run_sm2_keygen(args, openssl)
+            print(args.private_key, file=output)
+            print(args.public_key, file=output)
+            return EXIT_SUCCESS
+        if args.command == "sm2-convert":
+            run_sm2_convert(args)
             print(args.output, file=output)
             return EXIT_SUCCESS
         openssl = runner.resolve_openssl(args.openssl)
@@ -412,11 +729,33 @@ def main(
             run_decrypt_auth(args, openssl)
             print(args.output, file=output)
             return EXIT_SUCCESS
+        if args.command == "sm2-sign":
+            run_sm2_sign(args, openssl)
+            print(args.signature, file=output)
+            return EXIT_SUCCESS
+        if args.command == "sm2-verify":
+            verified = run_sm2_verify(args, openssl)
+            print("OK" if verified else "FAIL", file=output)
+            return EXIT_SUCCESS if verified else EXIT_VERIFY_FAILURE
+        if args.command == "sm2-encrypt":
+            run_sm2_encrypt(args, openssl)
+            print(args.output, file=output)
+            return EXIT_SUCCESS
+        if args.command == "sm2-decrypt":
+            run_sm2_decrypt(args, openssl)
+            print(args.output, file=output)
+            return EXIT_SUCCESS
         raise UserInputError(f"unsupported command: {args.command}")
     except authenticated_sm4.AuthenticationError as error:
         print(f"Error: {error}", file=error_output)
         return EXIT_VERIFY_FAILURE
-    except (UserInputError, runner.RunnerError, hmac_sm3_runner.RunnerError) as error:
+    except (
+        UserInputError,
+        runner.RunnerError,
+        hmac_sm3_runner.RunnerError,
+        sm2_runner.RunnerError,
+        sm2_cipher.CipherError,
+    ) as error:
         print(f"Error: {error}", file=error_output)
         return EXIT_INPUT_ERROR
 

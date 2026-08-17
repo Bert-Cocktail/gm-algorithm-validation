@@ -22,6 +22,9 @@ import sm4_runner
 import hmac_sm3_runner
 import authenticated_sm4
 import authenticated_sm4_runner
+import sm2_runner
+import sm2_encryption_runner
+import sm2_cipher
 
 
 EXIT_SUCCESS = 0
@@ -85,7 +88,7 @@ class CrossBackendMismatch(Exception):
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run SM3, HMAC-SM3, SM4, or authenticated SM4 test vectors "
+            "Run SM2, SM2 encryption, SM3, HMAC-SM3, SM4, or authenticated SM4 test vectors "
             "with OpenSSL, GmSSL, or both."
         )
     )
@@ -512,10 +515,28 @@ def run_document(
             mismatches=mismatches,
         )
 
+    if algorithm == "SM2":
+        return sm2_runner.run_tests(
+            sm2_runner.extract_tests(document),
+            backend,
+            openssl,
+            results=results,
+            mismatches=mismatches,
+        )
+
+    if algorithm == "SM2-ENCRYPTION":
+        return sm2_encryption_runner.run_tests(
+            sm2_encryption_runner.extract_tests(document),
+            backend,
+            openssl,
+            results=results,
+            mismatches=mismatches,
+        )
+
     name = algorithm or "<missing>"
     raise RunnerError(
         f"unsupported algorithm '{name}'; supported algorithms: "
-        "SM3, HMAC-SM3, SM4, SM4-CTR-HMAC-SM3"
+        "SM2, SM2-ENCRYPTION, SM3, HMAC-SM3, SM4, SM4-CTR-HMAC-SM3"
     )
 
 
@@ -615,6 +636,9 @@ def _execute_single(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         authenticated_sm4_runner.RunnerError,
         hmac_sm3_runner.RunnerError,
         sm4_runner.RunnerError,
+        sm2_runner.RunnerError,
+        sm2_encryption_runner.RunnerError,
+        sm2_cipher.CipherError,
     ) as error:
         print(f"Error: {error}", file=sys.stderr)
         exit_code = EXIT_INPUT_ERROR

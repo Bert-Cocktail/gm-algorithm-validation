@@ -172,7 +172,7 @@ python experiment_report.py `
   --output reports\experiment-report.md
 ```
 
-报告记录 Python、OpenSSL、gmssl、Git 提交、通过率和请求哈希，并保留非认证范围说明。`.github/workflows/validate.yml` 在 push 和 pull request 时自动运行 146 项测试、53 个回归向量、ACVP 批量处理、manifest、响应复核和报告生成。
+报告记录 Python、OpenSSL、gmssl、Git 提交、通过率和请求哈希，并保留非认证范围说明。`.github/workflows/validate.yml` 在 push 和 pull request 时自动运行 183 项测试、64 个回归向量、ACVP 批量处理、manifest、响应复核和报告生成。
 
 ## 交叉后端诊断
 

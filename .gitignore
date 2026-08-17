@@ -7,3 +7,5 @@ build/
 auth-key.json
 *.gmkey.json
 *.hmackey
+*.pem
+*.sig

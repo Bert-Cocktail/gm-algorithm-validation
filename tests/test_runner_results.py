@@ -19,6 +19,7 @@ VECTOR_FILES = {
     "hmac-sm3.json": ("HMAC-SM3", 4),
     "sm4.json": ("SM4", 28),
     "sm4-ctr-hmac-sm3.json": ("SM4-CTR-HMAC-SM3", 6),
+    "sm2.json": ("SM2", 6),
 }
 
 
@@ -33,9 +34,12 @@ class TestStructuredResults(unittest.TestCase):
             for vector_name, (algorithm, total) in VECTOR_FILES.items():
                 with self.subTest(vector=vector_name):
                     result_path = directory / f"{vector_name}.result.json"
+                    backend = "gmssl" if vector_name == "sm2.json" else "openssl"
                     exit_code = self.run_quietly(
                         [
                             str(PROJECT_ROOT / "vectors" / vector_name),
+                            "--backend",
+                            backend,
                             "--result-json",
                             str(result_path),
                         ]
@@ -45,7 +49,7 @@ class TestStructuredResults(unittest.TestCase):
                     self.assertEqual(exit_code, runner.EXIT_SUCCESS)
                     self.assertEqual(report["schemaVersion"], 1)
                     self.assertEqual(report["algorithm"], algorithm)
-                    self.assertEqual(report["backend"], "openssl")
+                    self.assertEqual(report["backend"], backend)
                     self.assertEqual(report["status"], "passed")
                     self.assertEqual(report["exitCode"], 0)
                     self.assertEqual(
@@ -88,7 +92,7 @@ class TestStructuredResults(unittest.TestCase):
             vector_path = directory / "unsupported.json"
             result_path = directory / "result.json"
             vector_path.write_text(
-                json.dumps({"algorithm": "SM2", "testGroups": []}),
+                json.dumps({"algorithm": "SM9", "testGroups": []}),
                 encoding="utf-8",
             )
 

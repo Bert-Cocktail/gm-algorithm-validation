@@ -1,0 +1,92 @@
+{
+  "algorithm": "SM2",
+  "description": "SM2 signature verification regression vectors",
+  "testGroups": [
+    {
+      "curve": "sm2p256v1",
+      "userId": "31323334353637383132333435363738",
+      "signatureFormat": "der",
+      "tests": [
+        {
+          "tcId": 1,
+          "description": "Valid signature for message digest",
+          "sourceType": "regression",
+          "source": "Generated with Python gmssl 3.2.2 using fixed test-only d=1 and k=2",
+          "operation": "verify",
+          "msg": "6d65737361676520646967657374",
+          "msgLen": 112,
+          "publicKey": "0432c4ae2c1f1981195f9904466a39c9948fe30bbff2660be1715a4589334c74c7bc3736a2f4f6779c59bdcee36b692153d0a9877cc62a474002df32e52139f0a0",
+          "signature": "3045022100962e02e24ec3266f82d846abcdac8331f74383ddb0dceaddd1f400a4dd3036af022034e8fe8e589e6cc83e93dcaa1929be66bd602dc6b8748d26c0e3f9b22e52853b",
+          "expected": true
+        },
+        {
+          "tcId": 2,
+          "description": "Valid signature for an empty message",
+          "sourceType": "regression",
+          "source": "Generated with Python gmssl 3.2.2 using fixed test-only d=1 and k=3",
+          "operation": "verify",
+          "msg": "",
+          "msgLen": 0,
+          "publicKey": "0432c4ae2c1f1981195f9904466a39c9948fe30bbff2660be1715a4589334c74c7bc3736a2f4f6779c59bdcee36b692153d0a9877cc62a474002df32e52139f0a0",
+          "signature": "304402201767e364a0ef2038cf97b75254af34447f8ba8424e2acd28a90a5edca4617aa20220744c0e4d2f886fe398342456d5a865dd793c1b9469cd9c015558ca964ab9e342",
+          "expected": true
+        },
+        {
+          "tcId": 3,
+          "description": "Message changed after signing",
+          "sourceType": "negative",
+          "source": "Derived from tcId 1",
+          "operation": "verify",
+          "msg": "6d65737361676520646967657375",
+          "msgLen": 112,
+          "publicKey": "0432c4ae2c1f1981195f9904466a39c9948fe30bbff2660be1715a4589334c74c7bc3736a2f4f6779c59bdcee36b692153d0a9877cc62a474002df32e52139f0a0",
+          "signature": "3045022100962e02e24ec3266f82d846abcdac8331f74383ddb0dceaddd1f400a4dd3036af022034e8fe8e589e6cc83e93dcaa1929be66bd602dc6b8748d26c0e3f9b22e52853b",
+          "expected": false
+        },
+        {
+          "tcId": 4,
+          "description": "Signature scalar changed",
+          "sourceType": "negative",
+          "source": "Derived from tcId 1 by incrementing s",
+          "operation": "verify",
+          "msg": "6d65737361676520646967657374",
+          "msgLen": 112,
+          "publicKey": "0432c4ae2c1f1981195f9904466a39c9948fe30bbff2660be1715a4589334c74c7bc3736a2f4f6779c59bdcee36b692153d0a9877cc62a474002df32e52139f0a0",
+          "signature": "3045022100962e02e24ec3266f82d846abcdac8331f74383ddb0dceaddd1f400a4dd3036af022034e8fe8e589e6cc83e93dcaa1929be66bd602dc6b8748d26c0e3f9b22e52853c",
+          "expected": false
+        },
+        {
+          "tcId": 5,
+          "description": "Signature checked with a different valid public key",
+          "sourceType": "negative",
+          "source": "Derived from tcId 1 using the test-only public key 2G",
+          "operation": "verify",
+          "msg": "6d65737361676520646967657374",
+          "msgLen": 112,
+          "publicKey": "0456cefd60d7c87c000d58ef57fa73ba4d9c0dfa08c08a7331495c2e1da3f2bd5231b7e7e6cc8189f668535ce0f8eaf1bd6de84c182f6c8e716f780d3a970a23c3",
+          "signature": "3045022100962e02e24ec3266f82d846abcdac8331f74383ddb0dceaddd1f400a4dd3036af022034e8fe8e589e6cc83e93dcaa1929be66bd602dc6b8748d26c0e3f9b22e52853b",
+          "expected": false
+        }
+      ]
+    },
+    {
+      "curve": "sm2p256v1",
+      "userId": "616c7465726e6174652d75736572",
+      "signatureFormat": "der",
+      "tests": [
+        {
+          "tcId": 6,
+          "description": "Signature checked with a different user ID",
+          "sourceType": "negative",
+          "source": "Derived from tcId 1",
+          "operation": "verify",
+          "msg": "6d65737361676520646967657374",
+          "msgLen": 112,
+          "publicKey": "0432c4ae2c1f1981195f9904466a39c9948fe30bbff2660be1715a4589334c74c7bc3736a2f4f6779c59bdcee36b692153d0a9877cc62a474002df32e52139f0a0",
+          "signature": "3045022100962e02e24ec3266f82d846abcdac8331f74383ddb0dceaddd1f400a4dd3036af022034e8fe8e589e6cc83e93dcaa1929be66bd602dc6b8748d26c0e3f9b22e52853b",
+          "expected": false
+        }
+      ]
+    }
+  ]
+}

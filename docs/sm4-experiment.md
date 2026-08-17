@@ -215,7 +215,7 @@ python -m unittest discover -s tests -v
 本次实测结果：
 
 ```text
-Ran 146 tests in ...
+Ran 183 tests in ...
 
 OK
 ```
@@ -245,4 +245,4 @@ OK
 2. 使用相同 JSON 向量交叉验证 Python 执行器和 C 后端。
 3. 研究 padding、IV 序列化和加密文件格式。
 4. 增加完整性认证，避免仅使用裸 CBC 或裸 CTR。
-5. 使用现有多后端 runner 继续开展 SM2 实验。
+5. 继续扩充 SM2 现行曲线公开向量和本地 ACVP 风格接口。

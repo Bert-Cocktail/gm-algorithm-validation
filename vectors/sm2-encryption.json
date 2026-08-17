@@ -1,0 +1,66 @@
+{
+  "algorithm": "SM2-ENCRYPTION",
+  "description": "SM2 encryption, decryption, and ciphertext-format vectors",
+  "testGroups": [
+    {
+      "curve": "sm2p256v1",
+      "tests": [
+        {
+          "tcId": 1,
+          "operation": "decrypt",
+          "sourceType": "regression",
+          "source": "Generated with Python gmssl 3.2.2 using test-only d=1 and fixed k=2",
+          "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+          "ciphertextFormat": "c1c3c2",
+          "ciphertext": "0456cefd60d7c87c000d58ef57fa73ba4d9c0dfa08c08a7331495c2e1da3f2bd5231b7e7e6cc8189f668535ce0f8eaf1bd6de84c182f6c8e716f780d3a970a23c31c46181090c091022e9cf9dafbb00330d9f68fc57e65641ed698b0f7c55c350fb0e49e77d6bd057e8ded5808e21f01c9fb0274",
+          "msg": "656e6372797074696f6e207374616e64617264",
+          "expected": true
+        },
+        {
+          "tcId": 2,
+          "operation": "decrypt",
+          "sourceType": "negative",
+          "source": "Derived from tcId 1 by changing C3",
+          "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+          "ciphertextFormat": "c1c3c2",
+          "ciphertext": "0456cefd60d7c87c000d58ef57fa73ba4d9c0dfa08c08a7331495c2e1da3f2bd5231b7e7e6cc8189f668535ce0f8eaf1bd6de84c182f6c8e716f780d3a970a23c21c46181090c091022e9cf9dafbb00330d9f68fc57e65641ed698b0f7c55c350fb0e49e77d6bd057e8ded5808e21f01c9fb0274",
+          "msg": "656e6372797074696f6e207374616e64617264",
+          "expected": false
+        },
+        {
+          "tcId": 3,
+          "operation": "encryptRoundTrip",
+          "sourceType": "round-trip",
+          "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+          "publicKey": "0432c4ae2c1f1981195f9904466a39c9948fe30bbff2660be1715a4589334c74c7bc3736a2f4f6779c59bdcee36b692153d0a9877cc62a474002df32e52139f0a0",
+          "msg": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+        }
+      ]
+    },
+    {
+      "curve": "draft-shen-sm2-ecdsa-02-appendix-c",
+      "tests": [
+        {
+          "tcId": 4,
+          "operation": "convert",
+          "sourceType": "published",
+          "source": "IETF draft-shen-sm2-ecdsa-02 Appendix C.2; format conversion only because the appendix uses its own example curve",
+          "sourceFormat": "c1c2c3",
+          "targetFormat": "c1c3c2",
+          "ciphertext": "04245c26fb68b1ddddb12c4b6bf9f2b6d5fe60a383b0d18d1c4144abf17f6252e776cb9264c2a7e88e52b19903fdc47378f605e36811f5c07423a24b84400f01b8650053a89b41c418b0c3aad00d886c002864679c3d7360c30156fab7c80a0276712da9d8094a634b766d3a285e07480653426d",
+          "expectedCiphertext": "04245c26fb68b1ddddb12c4b6bf9f2b6d5fe60a383b0d18d1c4144abf17f6252e776cb9264c2a7e88e52b19903fdc47378f605e36811f5c07423a24b84400f01b89c3d7360c30156fab7c80a0276712da9d8094a634b766d3a285e07480653426d650053a89b41c418b0c3aad00d886c00286467"
+        },
+        {
+          "tcId": 5,
+          "operation": "convert",
+          "sourceType": "published",
+          "source": "IETF draft-shen-sm2-ecdsa-02 Appendix C.2; encoded as OpenSSL-compatible DER",
+          "sourceFormat": "c1c2c3",
+          "targetFormat": "der",
+          "ciphertext": "04245c26fb68b1ddddb12c4b6bf9f2b6d5fe60a383b0d18d1c4144abf17f6252e776cb9264c2a7e88e52b19903fdc47378f605e36811f5c07423a24b84400f01b8650053a89b41c418b0c3aad00d886c002864679c3d7360c30156fab7c80a0276712da9d8094a634b766d3a285e07480653426d",
+          "expectedCiphertext": "307b0220245c26fb68b1ddddb12c4b6bf9f2b6d5fe60a383b0d18d1c4144abf17f6252e7022076cb9264c2a7e88e52b19903fdc47378f605e36811f5c07423a24b84400f01b804209c3d7360c30156fab7c80a0276712da9d8094a634b766d3a285e07480653426d0413650053a89b41c418b0c3aad00d886c00286467"
+        }
+      ]
+    }
+  ]
+}

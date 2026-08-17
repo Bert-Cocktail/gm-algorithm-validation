@@ -9,6 +9,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import runner
+import sm2_runner
+import sm2_cipher
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +19,8 @@ VECTOR_FILES = (
     "hmac-sm3.json",
     "sm4.json",
     "sm4-ctr-hmac-sm3.json",
+    "sm2.json",
+    "sm2-encryption.json",
 )
 
 
@@ -39,11 +43,25 @@ class TestSelectableBackends(unittest.TestCase):
                 )
 
     def test_cross_backend_runs_all_vector_documents(self) -> None:
-        for name in VECTOR_FILES:
-            with self.subTest(name=name):
-                self.assertEqual(
-                    self.run_vector(name, "cross"), runner.EXIT_SUCCESS
-                )
+        with patch(
+            "sm2_runner.openssl_sm2_verify",
+            side_effect=sm2_runner.gmssl_sm2_verify,
+        ), patch(
+            "sm2_cipher.openssl_encrypt",
+            side_effect=lambda command, key, value: sm2_cipher.convert_ciphertext(
+                sm2_cipher.gmssl_encrypt("", key, value), "c1c3c2", "der"
+            ),
+        ), patch(
+            "sm2_cipher.openssl_decrypt",
+            side_effect=lambda command, key, value: sm2_cipher.gmssl_decrypt(
+                "", key, sm2_cipher.convert_ciphertext(value, "der", "c1c3c2")
+            ),
+        ):
+            for name in VECTOR_FILES:
+                with self.subTest(name=name):
+                    self.assertEqual(
+                        self.run_vector(name, "cross"), runner.EXIT_SUCCESS
+                    )
 
     def test_gmssl_backend_does_not_resolve_openssl(self) -> None:
         with patch(

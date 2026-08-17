@@ -89,6 +89,8 @@ SM4 的基本参数为：
 
 ```text
 algorithm = SM3 -> 执行 SM3 逻辑
+algorithm = SM2 -> 执行 SM2 签名验证
+algorithm = SM2-ENCRYPTION -> 执行 SM2 加解密和格式转换
 algorithm = HMAC-SM3 -> 执行 HMAC-SM3 逻辑
 algorithm = SM4 -> 执行 SM4 逻辑
 algorithm = SM4-CTR-HMAC-SM3 -> 执行加密认证组合逻辑
@@ -112,10 +114,15 @@ gm-algorithm-validation/
 ├── authenticated_sm4.py       # 认证 SM4 格式与编码规则
 ├── authenticated_sm4_runner.py # 认证 SM4 向量执行器
 ├── gmssl_backend.py            # 独立 GmSSL 交叉验证后端
+├── sm2_runner.py               # SM2 签名向量执行器
+├── sm2_cipher.py               # SM2 加解密与密文格式转换
+├── sm2_encryption_runner.py    # SM2 加密向量执行器
 ├── sm4_runner.py              # SM4 实现与兼容入口
 ├── requirements-dev.txt       # 交叉验证开发依赖
 ├── vectors/
 │   ├── sm3.json               # SM3 测试向量
+│   ├── sm2.json               # SM2 签名验证向量
+│   ├── sm2-encryption.json    # SM2 加解密与格式转换向量
 │   ├── hmac-sm3.json          # HMAC-SM3 回归测试向量
 │   ├── sm4-ctr-hmac-sm3.json  # 认证 SM4-CTR 实验向量
 │   └── sm4.json               # SM4 ECB/CBC/CTR 测试向量
@@ -243,6 +250,26 @@ python gmcrypto.py sm3 --text "abc"
 python gmcrypto.py sm3 --hex 616263
 python gmcrypto.py sm3 --file examples\message.txt
 ```
+
+生成 SM2 密钥、签名和验签：
+
+```powershell
+python gmcrypto.py sm2-keygen --private-key sm2-private.pem --public-key sm2-public.pem --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+python gmcrypto.py sm2-sign --private-key sm2-private.pem --input examples\message.txt --signature message.sig --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+python gmcrypto.py sm2-verify --public-key sm2-public.pem --input examples\message.txt --signature message.sig --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+```
+
+密钥为 PEM 文件，签名为 DER 文件。默认用户 ID 是 `1234567812345678`；可在签名和验签命令中同时使用相同的 `--user-id`。成功输出 `OK` 并返回 `0`，签名不匹配输出 `FAIL` 并返回 `1`，输入或环境错误返回 `2`。
+
+SM2 公钥加密、密文转换和私钥解密：
+
+```powershell
+python gmcrypto.py sm2-encrypt --public-key sm2-public.pem --input examples\message.txt --output message.c1c3c2 --format c1c3c2 --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+python gmcrypto.py sm2-convert --input message.c1c3c2 --output message.c1c2c3 --from-format c1c3c2 --to-format c1c2c3
+python gmcrypto.py sm2-decrypt --private-key sm2-private.pem --input message.c1c2c3 --output recovered.txt --format c1c2c3 --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+```
+
+`der` 是 OpenSSL 的 ASN.1 密文格式；`c1c3c2` 和 `c1c2c3` 都使用带 `04` 前缀的 65 byte 未压缩 C1。程序严格检查 DER 长度、C1/C2/C3 长度和 C3 完整性，错误密文不会写出输出文件。SM2 只适合短消息，较大文件应使用混合加密方案。
 
 三种输入必须且只能选择一种：
 
@@ -624,15 +651,18 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 146 项测试：
+当前共有 183 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
+- 24 项 SM2 执行器与编码测试
+- 7 项 SM2 加密、解密和格式转换测试
+- 5 项普通用户 SM2 CLI 测试
 - 7 项 `gmcrypto.py` 普通用户 SM3 CLI 测试
 - 13 项 HMAC-SM3 CLI 测试
 - 8 项普通用户认证加密 CLI 测试
 - 8 项 HMAC-SM3 向量执行器测试
-- 5 项统一入口分派测试
+- 6 项统一入口分派测试
 - 21 项认证 SM4 格式、加解密与篡改测试
 - 6 项认证 SM4 向量执行器测试
 - 7 项 OpenSSL/GmSSL 交叉验证测试
@@ -647,7 +677,7 @@ python -m unittest discover -s tests -v
 当前预期结果：
 
 ```text
-Ran 146 tests in ...
+Ran 183 tests in ...
 
 OK
 ```
@@ -692,7 +722,7 @@ python -m unittest tests.test_runner_dispatch -v
 | `extract_tests()` | 提取并校验 SM3 测试用例 |
 | `sm3_digest()` | 调用 OpenSSL 计算 SM3 |
 | `run_tests()` | 执行 SM3 测试并汇总结果 |
-| `run_document()` | 根据算法名称分派 SM3、HMAC-SM3、SM4 或认证 SM4 |
+| `run_document()` | 根据算法名称分派 SM2、SM3、HMAC-SM3、SM4 或认证 SM4 |
 | `_build_report()` | 构造统一的结果报告对象 |
 | `_write_json_atomic()` | 原子写入 UTF-8 JSON 结果文件 |
 | `_run_all()` | 发现并逐个运行向量目录中的 JSON 文件 |
@@ -707,6 +737,8 @@ python -m unittest tests.test_runner_dispatch -v
 - 生成和验证 HMAC-SM3 tag
 - 生成认证加密双密钥文件
 - 使用密钥文件完成 SM4-CTR + HMAC-SM3 认证加密与解密
+- 使用 PEM 密钥文件完成 SM2 密钥生成、签名、验签、公钥加密和私钥解密
+- 在 DER、C1C3C2、C1C2C3 三种 SM2 密文格式间转换
 - 认证成功后才原子写出明文，并默认拒绝覆盖已有文件
 - 明确处理文本编码和十六进制错误
 - SM3 文件摘要由 OpenSSL 文件接口读取；HMAC 文件输入读取为字节后复用统一底层函数
@@ -726,6 +758,9 @@ python -m unittest tests.test_runner_dispatch -v
 | `run_generate_auth_key()` | 使用安全随机源生成双密钥文件 |
 | `run_encrypt_auth()` | 加密并输出认证 JSON 包 |
 | `run_decrypt_auth()` | 认证成功后解密并写出明文 |
+| `run_sm2_keygen()` | 生成并自检 SM2 PEM 密钥对 |
+| `run_sm2_sign()` | 使用私钥文件生成 DER 签名 |
+| `run_sm2_verify()` | 使用公钥文件验证 DER 签名 |
 | `write_atomic()` | 使用同目录临时文件写入并提供覆盖保护 |
 | `main()` | 普通用户命令入口和错误处理 |
 
@@ -845,6 +880,8 @@ abc
 - 不要在仓库、JSON、命令历史或测试代码中保存真实生产密钥。
 - HMAC-SM3 推荐使用仓库外的原始二进制 `.hmackey` 文件；`--key-hex` 仅为兼容保留，会进入命令历史和进程参数。
 - `encrypt-auth` 和 `decrypt-auth` 只接受 `--key-file`。密钥文件包含明文密钥，应放在仓库外、限制访问且不得提交到 Git。
+- SM2 私钥只通过 PEM 文件读取，不应提交到 Git；签名与验签必须使用相同的用户 ID。
+- 当前 PATH 中的 OpenSSL 1.1.1i 构建不能执行 SM2 签名，应通过 `--openssl` 指定支持 SM2 的 OpenSSL 3。
 - 认证加密输入文件和 JSON 包上限为 64 MiB，当前会完整读入内存。
 - 认证 JSON 格式未经标准化、安全审计或生产互操作验证。
 
@@ -857,6 +894,7 @@ python runner.py vectors\sm3.json
 python runner.py vectors\hmac-sm3.json
 python runner.py vectors\sm4-ctr-hmac-sm3.json
 python runner.py vectors\sm4.json
+python runner.py vectors\sm2.json --backend cross --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
 python runner.py --all --backend cross --result-dir results
 python -m unittest discover -s tests -v
 git diff --check
@@ -881,5 +919,5 @@ git commit -m "描述本次修改"
 4. 若获得明确覆盖 SM3/SM4 的权威规范，实现对应 MCT、LDT 规则及正式参数集映射。
 5. 为 HMAC-SM3 增加独立正式标准向量。
 6. 研究流式大文件处理、操作系统密钥库和标准化认证加密容器。
-7. 增加 SM2 密钥生成、签名、验签和加解密实验。
+7. 为 SM2 增加本地 ACVP 风格请求、更多与现行 `sm2p256v1` 完全匹配的公开标准向量。
 8. 在具备授权和合规条件后，另行研究 ACVTS 注册、会话和传输流程。

@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import gmcrypto
 import runner
@@ -19,6 +20,11 @@ HMAC_KEY = "00112233445566778899aabbccddeeff"
 ABC_HMAC = "0933617a88d312f6f9fb4b5f200e31a64d655e92f7fa2a43f55dfeeb8ab6788d"
 SM4_KEY = "0123456789abcdeffedcba9876543210"
 AUTH_HMAC_KEY = "00112233445566778899aabbccddeeff" * 2
+SM2_SIGNATURE = bytes.fromhex(
+    "3045022100962e02e24ec3266f82d846abcdac8331f74383ddb0dceaddd1f400a4dd"
+    "3036af022034e8fe8e589e6cc83e93dcaa1929be66bd602dc6b8748d26c0e3f9b22e"
+    "52853b"
+)
 
 
 class TestGmcryptoSm3(unittest.TestCase):
@@ -433,6 +439,128 @@ class TestGmcryptoAuthenticatedEncryption(unittest.TestCase):
 
             self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
             self.assertIn("exactly", errors)
+
+
+class TestGmcryptoSm2(unittest.TestCase):
+    def run_command(self, arguments: list[str]) -> tuple[int, str, str]:
+        output = io.StringIO()
+        errors = io.StringIO()
+        result = gmcrypto.main(arguments, output=output, error_output=errors)
+        return result, output.getvalue().strip(), errors.getvalue().strip()
+
+    def test_key_paths_must_differ(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            path = Path(directory_name) / "same.pem"
+            result, _output, errors = self.run_command(
+                [
+                    "sm2-keygen",
+                    "--private-key",
+                    str(path),
+                    "--public-key",
+                    str(path),
+                ]
+            )
+        self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+        self.assertIn("must be different", errors)
+
+    def test_sign_rejects_missing_private_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            message = directory / "message.bin"
+            message.write_bytes(b"message")
+            result, _output, errors = self.run_command(
+                [
+                    "sm2-sign",
+                    "--private-key",
+                    str(directory / "missing.pem"),
+                    "--input",
+                    str(message),
+                    "--signature",
+                    str(directory / "message.sig"),
+                ]
+            )
+        self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+        self.assertIn("not found", errors)
+
+    def test_empty_user_id_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            public_key = directory / "public.pem"
+            message = directory / "message.bin"
+            signature = directory / "message.sig"
+            public_key.write_bytes(b"public")
+            message.write_bytes(b"message")
+            signature.write_bytes(SM2_SIGNATURE)
+            result, _output, errors = self.run_command(
+                [
+                    "sm2-verify",
+                    "--public-key",
+                    str(public_key),
+                    "--input",
+                    str(message),
+                    "--signature",
+                    str(signature),
+                    "--user-id",
+                    "",
+                ]
+            )
+        self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+        self.assertIn("must not be empty", errors)
+
+    def test_verify_success_and_failure_exit_codes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            public_key = directory / "public.pem"
+            message = directory / "message.bin"
+            signature = directory / "message.sig"
+            public_key.write_bytes(b"public")
+            message.write_bytes(b"message")
+            signature.write_bytes(SM2_SIGNATURE)
+            arguments = [
+                "sm2-verify",
+                "--public-key",
+                str(public_key),
+                "--input",
+                str(message),
+                "--signature",
+                str(signature),
+            ]
+            with patch("gmcrypto.run_sm2_verify", return_value=True):
+                success, success_output, _ = self.run_command(arguments)
+            with patch("gmcrypto.run_sm2_verify", return_value=False):
+                failure, failure_output, _ = self.run_command(arguments)
+
+        self.assertEqual(success, gmcrypto.EXIT_SUCCESS)
+        self.assertEqual(success_output, "OK")
+        self.assertEqual(failure, gmcrypto.EXIT_VERIFY_FAILURE)
+        self.assertEqual(failure_output, "FAIL")
+
+    def test_invalid_der_signature_is_rejected_before_openssl(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            public_key = directory / "public.pem"
+            message = directory / "message.bin"
+            signature = directory / "bad.sig"
+            public_key.write_bytes(b"public")
+            message.write_bytes(b"message")
+            signature.write_bytes(b"not-der")
+            with patch(
+                "gmcrypto.run_openssl_command",
+                side_effect=AssertionError("OpenSSL must not run"),
+            ):
+                result, _output, errors = self.run_command(
+                    [
+                        "sm2-verify",
+                        "--public-key",
+                        str(public_key),
+                        "--input",
+                        str(message),
+                        "--signature",
+                        str(signature),
+                    ]
+                )
+        self.assertEqual(result, gmcrypto.EXIT_INPUT_ERROR)
+        self.assertIn("invalid SM2 DER signature", errors)
 
 
 if __name__ == "__main__":
