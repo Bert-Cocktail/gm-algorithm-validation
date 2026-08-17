@@ -47,6 +47,14 @@ class TestCiphertextFormats(unittest.TestCase):
         with self.assertRaisesRegex(sm2_cipher.CipherError, "non-canonical"):
             sm2_cipher.parse_ciphertext(malformed, "der")
 
+    def test_private_key_pem_contains_matching_public_key(self) -> None:
+        pem = sm2_cipher.private_key_pem(PRIVATE_KEY)
+        self.assertIn(b"BEGIN EC PRIVATE KEY", pem)
+        import base64
+
+        body = b"".join(pem.splitlines()[1:-1])
+        self.assertIn(PUBLIC_KEY, base64.b64decode(body))
+
 
 class TestEncryptionVectors(unittest.TestCase):
     def test_repository_vectors_are_valid(self) -> None:

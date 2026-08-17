@@ -13,6 +13,8 @@ from pathlib import Path
 SM2_FIELD = int("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF", 16)
 SM2_A = int("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFC", 16)
 SM2_B = int("28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93", 16)
+SM2_GX = int("32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7", 16)
+SM2_GY = int("BC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0", 16)
 SM2_ORDER = int("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123", 16)
 SM2_C1_BYTES = 65
 SM2_C3_BYTES = 32
@@ -180,16 +182,54 @@ def public_key_pem(public_key: bytes) -> bytes:
     return _pem("PUBLIC KEY", prefix + public_key)
 
 
+def _scalar_multiply(value: int) -> tuple[int, int]:
+    result: tuple[int, int] | None = None
+    addend = (SM2_GX, SM2_GY)
+    while value:
+        if value & 1:
+            result = _point_add(result, addend)
+        addend = _point_add(addend, addend)
+        value >>= 1
+    if result is None:
+        raise CipherError("SM2 private key produced the point at infinity")
+    return result
+
+
+def _point_add(
+    left: tuple[int, int] | None, right: tuple[int, int] | None
+) -> tuple[int, int] | None:
+    if left is None:
+        return right
+    if right is None:
+        return left
+    x1, y1 = left
+    x2, y2 = right
+    if x1 == x2 and (y1 + y2) % SM2_FIELD == 0:
+        return None
+    if left == right:
+        slope = (3 * x1 * x1 + SM2_A) * pow(2 * y1, -1, SM2_FIELD)
+    else:
+        slope = (y2 - y1) * pow(x2 - x1, -1, SM2_FIELD)
+    slope %= SM2_FIELD
+    x3 = (slope * slope - x1 - x2) % SM2_FIELD
+    y3 = (slope * (x1 - x3) - y1) % SM2_FIELD
+    return x3, y3
+
+
 def private_key_pem(private_key: bytes) -> bytes:
     if len(private_key) != 32:
         raise CipherError("SM2 private key must contain exactly 32 bytes")
     value = int.from_bytes(private_key, "big")
     if not 1 <= value < SM2_ORDER:
         raise CipherError("SM2 private key must be in the range [1, n-1]")
+    public_x, public_y = _scalar_multiply(value)
+    public_key = b"\x04" + public_x.to_bytes(32, "big") + public_y.to_bytes(32, "big")
     content = (
         bytes.fromhex("0201010420")
         + private_key
         + bytes.fromhex("a00a06082a811ccf5501822d")
+        + bytes.fromhex("a144034200")
+        + public_key
     )
     return _pem("EC PRIVATE KEY", _encode_tlv(0x30, content))
 

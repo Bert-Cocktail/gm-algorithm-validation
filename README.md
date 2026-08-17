@@ -424,12 +424,12 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 185 项测试：
+当前共有 186 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
 - 24 项 SM2 执行器与编码测试
-- 7 项 SM2 加密、解密和格式转换测试
+- 8 项 SM2 加密、解密、格式转换和私钥编码测试
 - 5 项普通用户 SM2 CLI 测试
 - 7 项普通用户 SM3 CLI 测试
 - 13 项 HMAC-SM3 CLI 测试
@@ -450,7 +450,7 @@ python -m unittest discover -s tests -v
 本次实测结果：
 
 ```text
-Ran 185 tests in ...
+Ran 186 tests in ...
 
 OK
 ```
