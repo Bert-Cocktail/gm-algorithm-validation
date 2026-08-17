@@ -216,7 +216,7 @@ def _point_add(
     return x3, y3
 
 
-def private_key_pem(private_key: bytes) -> bytes:
+def _private_key_material(private_key: bytes) -> tuple[bytes, bytes]:
     if len(private_key) != 32:
         raise CipherError("SM2 private key must contain exactly 32 bytes")
     value = int.from_bytes(private_key, "big")
@@ -224,14 +224,31 @@ def private_key_pem(private_key: bytes) -> bytes:
         raise CipherError("SM2 private key must be in the range [1, n-1]")
     public_x, public_y = _scalar_multiply(value)
     public_key = b"\x04" + public_x.to_bytes(32, "big") + public_y.to_bytes(32, "big")
-    content = (
+    ec_private_key = _encode_tlv(0x30, (
         bytes.fromhex("0201010420")
         + private_key
         + bytes.fromhex("a00a06082a811ccf5501822d")
         + bytes.fromhex("a144034200")
         + public_key
+    ))
+    return ec_private_key, public_key
+
+
+def _legacy_private_key_pem(private_key: bytes) -> bytes:
+    ec_private_key, _ = _private_key_material(private_key)
+    return _pem("EC PRIVATE KEY", ec_private_key)
+
+
+def private_key_pem(private_key: bytes) -> bytes:
+    ec_private_key, _ = _private_key_material(private_key)
+    algorithm = bytes.fromhex(
+        "301306072a8648ce3d020106082a811ccf5501822d"
     )
-    return _pem("EC PRIVATE KEY", _encode_tlv(0x30, content))
+    private_key_info = _encode_tlv(
+        0x30,
+        bytes.fromhex("020100") + algorithm + _encode_tlv(0x04, ec_private_key),
+    )
+    return _pem("PRIVATE KEY", private_key_info)
 
 
 def _run_openssl(command: list[str], operation: str) -> bytes:
@@ -277,20 +294,26 @@ def openssl_decrypt(openssl: str, private_key: bytes, ciphertext_der: bytes) -> 
         directory = Path(directory_name)
         private_path = directory / "private.pem"
         ciphertext_path = directory / "ciphertext.der"
-        private_path.write_bytes(private_key_pem(private_key))
         ciphertext_path.write_bytes(ciphertext_der)
-        return _run_openssl(
-            [
-                openssl,
-                "pkeyutl",
-                "-decrypt",
-                "-inkey",
-                str(private_path),
-                "-in",
-                str(ciphertext_path),
-            ],
-            "decryption",
-        )
+        failures: list[CipherError] = []
+        for encoded_key in (_legacy_private_key_pem(private_key), private_key_pem(private_key)):
+            private_path.write_bytes(encoded_key)
+            try:
+                return _run_openssl(
+                    [
+                        openssl,
+                        "pkeyutl",
+                        "-decrypt",
+                        "-inkey",
+                        str(private_path),
+                        "-in",
+                        str(ciphertext_path),
+                    ],
+                    "decryption",
+                )
+            except CipherError as error:
+                failures.append(error)
+        raise failures[-1]
 
 
 def gmssl_encrypt(_openssl: str, public_key: bytes, plaintext: bytes) -> bytes:

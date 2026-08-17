@@ -49,11 +49,41 @@ class TestCiphertextFormats(unittest.TestCase):
 
     def test_private_key_pem_contains_matching_public_key(self) -> None:
         pem = sm2_cipher.private_key_pem(PRIVATE_KEY)
-        self.assertIn(b"BEGIN EC PRIVATE KEY", pem)
+        self.assertIn(b"BEGIN PRIVATE KEY", pem)
         import base64
 
         body = b"".join(pem.splitlines()[1:-1])
         self.assertIn(PUBLIC_KEY, base64.b64decode(body))
+
+    def test_private_key_uses_pkcs8_algorithm_identifier(self) -> None:
+        import base64
+
+        pem = sm2_cipher.private_key_pem(PRIVATE_KEY)
+        der = base64.b64decode(b"".join(pem.splitlines()[1:-1]))
+        algorithm = bytes.fromhex(
+            "301306072a8648ce3d020106082a811ccf5501822d"
+        )
+        self.assertIn(bytes.fromhex("020100") + algorithm, der)
+
+    def test_openssl_decrypt_retries_with_pkcs8_key(self) -> None:
+        calls = []
+
+        def fake_run(command, operation):
+            key = Path(command[command.index("-inkey") + 1]).read_bytes()
+            calls.append(key.splitlines()[0])
+            if len(calls) == 1:
+                raise sm2_cipher.CipherError("could not read private key")
+            return b"abc"
+
+        with patch("sm2_cipher.parse_ciphertext"), patch(
+            "sm2_cipher._run_openssl", side_effect=fake_run
+        ):
+            recovered = sm2_cipher.openssl_decrypt("openssl", PRIVATE_KEY, b"der")
+        self.assertEqual(recovered, b"abc")
+        self.assertEqual(calls, [
+            b"-----BEGIN EC PRIVATE KEY-----",
+            b"-----BEGIN PRIVATE KEY-----",
+        ])
 
 
 class TestEncryptionVectors(unittest.TestCase):
