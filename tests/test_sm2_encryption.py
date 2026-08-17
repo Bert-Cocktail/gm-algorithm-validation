@@ -90,6 +90,31 @@ class TestEncryptionVectors(unittest.TestCase):
         with self.assertRaisesRegex(sm2_encryption_runner.RunnerError, "duplicate"):
             sm2_encryption_runner.extract_tests(document)
 
+    def test_cross_result_identifies_rejecting_backend_without_error_detail(self) -> None:
+        tests = [{
+            "tcId": 1, "operation": "decrypt", "curve": "sm2p256v1",
+            "privateKey": PRIVATE_KEY.hex(), "ciphertext": "00",
+            "ciphertextFormat": "der", "msg": "61", "expected": True,
+        }]
+        results = []
+        with patch(
+            "sm2_cipher.convert_ciphertext", return_value=b"der"
+        ), patch(
+            "sm2_cipher.openssl_decrypt",
+            side_effect=sm2_cipher.CipherError("secret backend detail"),
+        ), patch(
+            "sm2_cipher.gmssl_decrypt", return_value=b"a"
+        ):
+            exit_code = sm2_encryption_runner.run_tests(
+                tests, "cross", "openssl", output=io.StringIO(), results=results
+            )
+        self.assertEqual(exit_code, sm2_encryption_runner.EXIT_TEST_FAILURE)
+        self.assertEqual(results[0]["backendResults"], [
+            {"backend": "openssl", "status": "rejected", "category": "backend-rejected"},
+            {"backend": "gmssl", "status": "accepted"},
+        ])
+        self.assertNotIn("secret backend detail", str(results))
+
 
 if __name__ == "__main__":
     unittest.main()

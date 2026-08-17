@@ -16,6 +16,22 @@ class RunnerError(ValueError):
     """Raised when an SM2 encryption vector is malformed."""
 
 
+def _error_category(error: sm2_cipher.CipherError) -> str:
+    """Return a stable, non-sensitive category for backend diagnostics."""
+    detail = str(error).lower()
+    if "not supported" in detail or "operation not supported" in detail:
+        return "operation-not-supported"
+    if "could not read" in detail or "unable to load" in detail or "decoder" in detail:
+        return "key-decode-failed"
+    if "integrity" in detail or "digest" in detail:
+        return "integrity-check-failed"
+    if "requires 'gmssl" in detail:
+        return "backend-unavailable"
+    if "failed to run openssl" in detail:
+        return "backend-execution-failed"
+    return "backend-rejected"
+
+
 def _hex(value: Any, field: str, tc_id: Any, length: int | None = None) -> str:
     if not isinstance(value, str) or len(value) % 2:
         raise RunnerError(f"tcId={tc_id}: '{field}' must contain whole hexadecimal bytes")
@@ -90,6 +106,7 @@ def run_tests(
     passed = 0
     for test in tests:
         tc_id = test["tcId"]
+        backend_results: list[dict[str, str]] = []
         try:
             if test["operation"] == "convert":
                 actual = sm2_cipher.convert_ciphertext(
@@ -109,8 +126,14 @@ def run_tests(
                         else:
                             raw = sm2_cipher.convert_ciphertext(original, test["ciphertextFormat"], "c1c3c2")
                             recovered.append(sm2_cipher.gmssl_decrypt("", bytes.fromhex(test["privateKey"]), raw))
-                    except sm2_cipher.CipherError:
+                        backend_results.append({"backend": selected, "status": "accepted"})
+                    except sm2_cipher.CipherError as error:
                         rejected += 1
+                        backend_results.append({
+                            "backend": selected,
+                            "status": "rejected",
+                            "category": _error_category(error),
+                        })
                 if expected_success:
                     ok = not rejected and all(value.hex() == test["msg"] for value in recovered)
                     actual = recovered[0].hex() if recovered else "rejected"
@@ -123,21 +146,32 @@ def run_tests(
                 selected_backends = ["openssl", "gmssl"] if backend == "cross" else [backend]
                 recovered = []
                 for selected in selected_backends:
-                    if selected == "openssl":
-                        cipher = sm2_cipher.openssl_encrypt(openssl, bytes.fromhex(test["publicKey"]), msg)
-                        recovered.append(sm2_cipher.openssl_decrypt(openssl, bytes.fromhex(test["privateKey"]), cipher))
-                    else:
-                        cipher = sm2_cipher.gmssl_encrypt("", bytes.fromhex(test["publicKey"]), msg)
-                        recovered.append(sm2_cipher.gmssl_decrypt("", bytes.fromhex(test["privateKey"]), cipher))
-                ok = all(value == msg for value in recovered)
-                actual = recovered[0].hex()
+                    try:
+                        if selected == "openssl":
+                            cipher = sm2_cipher.openssl_encrypt(openssl, bytes.fromhex(test["publicKey"]), msg)
+                            recovered.append(sm2_cipher.openssl_decrypt(openssl, bytes.fromhex(test["privateKey"]), cipher))
+                        else:
+                            cipher = sm2_cipher.gmssl_encrypt("", bytes.fromhex(test["publicKey"]), msg)
+                            recovered.append(sm2_cipher.gmssl_decrypt("", bytes.fromhex(test["privateKey"]), cipher))
+                        backend_results.append({"backend": selected, "status": "accepted"})
+                    except sm2_cipher.CipherError as error:
+                        backend_results.append({
+                            "backend": selected,
+                            "status": "rejected",
+                            "category": _error_category(error),
+                        })
+                ok = len(recovered) == len(selected_backends) and all(value == msg for value in recovered)
+                actual = recovered[0].hex() if recovered else "error"
         except sm2_cipher.CipherError:
             if test["operation"] == "decrypt" and not test.get("expected", True):
                 ok, actual = True, "rejected"
             else:
                 ok, actual = False, "error"
         if results is not None:
-            results.append({"tcId": tc_id, "status": "passed" if ok else "failed", "actual": actual})
+            result = {"tcId": tc_id, "status": "passed" if ok else "failed", "actual": actual}
+            if backend_results:
+                result["backendResults"] = backend_results
+            results.append(result)
         print(f"[{'PASS' if ok else 'FAIL'}] tcId={tc_id}", file=output)
         passed += int(ok)
     print(f"\nTotal: {len(tests)}, Passed: {passed}, Failed: {len(tests)-passed}", file=output)

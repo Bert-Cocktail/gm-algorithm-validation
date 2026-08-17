@@ -33,7 +33,7 @@ jobs:
         run: |
           if ! python runner.py --all --backend cross --result-dir results; then
             python -c "import json; data=json.load(open('results/summary.json', encoding='utf-8')); print('::error title=Regression vector summary::' + json.dumps(data, separators=(',', ':')))"
-            python -c "import glob,json,os; reports=[json.load(open(path, encoding='utf-8')) for path in glob.glob('results/*-cross.json')]; [print('::error title=' + os.path.basename(report['vectorFile']) + ' failed tcIds::' + json.dumps([{'tcId': item['tcId'], 'status': item['status'], 'actual': item.get('actual')} for item in report['tests'] if item['status'] != 'passed'], separators=(',', ':'))) for report in reports if report['status'] != 'passed']"
+            python -c "import glob,json,os; reports=[json.load(open(path, encoding='utf-8')) for path in glob.glob('results/*-cross.json')]; [print('::error title=' + os.path.basename(report['vectorFile']) + ' failed tcIds::' + json.dumps([{'tcId': item['tcId'], 'status': item['status'], 'backendResults': item.get('backendResults', [])} for item in report['tests'] if item['status'] != 'passed'], separators=(',', ':'))) for report in reports if report['status'] != 'passed']"
             exit 1
           fi
 
