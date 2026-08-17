@@ -17,13 +17,17 @@
       "properties": {
         "vsId": {"type": "integer", "minimum": 0},
         "algorithm": {
-          "enum": ["SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"]
+          "enum": ["SM2", "SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"]
         },
         "testGroups": {"type": "array", "minItems": 1}
       },
       "required": ["vsId", "algorithm", "testGroups"],
       "additionalProperties": false,
       "allOf": [
+        {
+          "if": {"properties": {"algorithm": {"const": "SM2"}}},
+          "then": {"properties": {"testGroups": {"items": {"$ref": "#/$defs/sm2Group"}}}}
+        },
         {
           "if": {"properties": {"algorithm": {"const": "SM3"}}},
           "then": {"properties": {"testGroups": {"items": {"$ref": "#/$defs/sm3Group"}}}}
@@ -46,6 +50,50 @@
   "$defs": {
     "hex": {"type": "string", "pattern": "^(?:[0-9a-fA-F]{2})*$"},
     "positiveId": {"type": "integer", "minimum": 0},
+    "sm2Group": {
+      "type": "object",
+      "properties": {
+        "tgId": {"$ref": "#/$defs/positiveId"},
+        "testType": {"const": "AFT"},
+        "curve": {"const": "sm2p256v1"},
+        "operation": {"enum": ["verify", "decrypt"]},
+        "signatureFormat": {"const": "der"},
+        "ciphertextFormat": {"enum": ["der", "c1c3c2", "c1c2c3"]},
+        "tests": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "tcId": {"$ref": "#/$defs/positiveId"},
+              "userId": {"type": "string", "pattern": "^(?:[0-9a-fA-F]{2})+$", "maxLength": 16382},
+              "msg": {"$ref": "#/$defs/hex"},
+              "msgLen": {"type": "integer", "minimum": 0, "maximum": 1048576, "multipleOf": 8},
+              "publicKey": {"type": "string", "pattern": "^04[0-9a-fA-F]{128}$"},
+              "signature": {"$ref": "#/$defs/hex"},
+              "privateKey": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+              "ciphertext": {"type": "string", "pattern": "^(?:[0-9a-fA-F]{2})+$"}
+            },
+            "required": ["tcId"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["tgId", "testType", "curve", "operation", "tests"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"operation": {"const": "verify"}}},
+          "then": {
+            "required": ["signatureFormat"],
+            "properties": {"tests": {"items": {"required": ["userId", "msg", "msgLen", "publicKey", "signature"]}}}
+          },
+          "else": {
+            "required": ["ciphertextFormat"],
+            "properties": {"tests": {"items": {"required": ["privateKey", "ciphertext"]}}}
+          }
+        }
+      ]
+    },
     "sm3Group": {
       "type": "object",
       "properties": {

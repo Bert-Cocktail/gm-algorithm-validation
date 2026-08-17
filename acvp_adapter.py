@@ -20,6 +20,8 @@ import authenticated_sm4_runner
 import hmac_sm3_runner
 import runner
 import sm4_runner
+import sm2_cipher
+import sm2_runner
 
 
 EXIT_SUCCESS = 0
@@ -42,6 +44,24 @@ CAPABILITIES: dict[str, Any] = {
     "acvVersion": ACV_VERSION,
     "localFormat": True,
     "algorithms": [
+        {
+            "algorithm": "SM2",
+            "identifierMapping": {
+                "localAlgorithm": "SM2",
+                "standardIdentifier": "GB/T 32918 local verification and decryption experiment",
+                "acvpAlgorithm": None,
+                "acvpStatus": "no-identifier-asserted",
+            },
+            "revision": "GB/T 32918",
+            "testTypes": TEST_TYPES,
+            "curve": "sm2p256v1",
+            "operations": ["verify", "decrypt"],
+            "signatureFormats": ["der"],
+            "ciphertextFormats": ["der", "c1c3c2", "c1c2c3"],
+            "messageLength": {"min": 0, "max": 1048576, "increment": 8},
+            "privateKeyLength": 256,
+            "publicKeyLength": 520,
+        },
         {
             "algorithm": "SM3",
             "identifierMapping": {
@@ -202,6 +222,24 @@ def _validate_group_parameters(request: dict[str, Any]) -> None:
                 _validate_range(
                     test["msgLen"], capability["messageLength"], "msgLen", test["tcId"]
                 )
+        elif algorithm == "SM2":
+            operation = group["operation"]
+            if group["curve"] != capability["curve"]:
+                raise AdapterError(f"tgId={tg_id}: SM2 curve must be {capability['curve']}")
+            if operation not in capability["operations"]:
+                raise AdapterError(f"tgId={tg_id}: unsupported SM2 operation '{operation}'")
+            if operation == "verify":
+                if group["signatureFormat"] not in capability["signatureFormats"]:
+                    raise AdapterError(f"tgId={tg_id}: unsupported SM2 signature format")
+                for test in group["tests"]:
+                    _validate_range(
+                        test["msgLen"], capability["messageLength"], "msgLen", test["tcId"]
+                    )
+                    if len(test["msg"]) * 4 != test["msgLen"]:
+                        raise AdapterError(f"tcId={test['tcId']}: msg length does not match msgLen")
+            else:
+                if group["ciphertextFormat"] not in capability["ciphertextFormats"]:
+                    raise AdapterError(f"tgId={tg_id}: unsupported SM2 ciphertext format")
         elif algorithm == "HMAC-SM3":
             _validate_range(group["keyLen"], capability["keyLength"], "keyLen", tg_id)
             for test in group["tests"]:
@@ -489,6 +527,89 @@ def _authenticated_response(
     return response_groups
 
 
+def _sm2_response(
+    request: dict[str, Any], openssl: str, backend: str, mismatches: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    response_groups: list[dict[str, Any]] = []
+    for group in request["testGroups"]:
+        operation = group["operation"]
+        response_tests: list[dict[str, Any]] = []
+        for test in group["tests"]:
+            tc_id = test["tcId"]
+            if operation == "verify":
+                validation = {
+                    "algorithm": "SM2",
+                    "testGroups": [{
+                        "curve": group["curve"],
+                        "userId": test["userId"],
+                        "signatureFormat": group["signatureFormat"],
+                        "tests": [{**test, "operation": "verify", "expected": True}],
+                    }],
+                }
+                normalized = sm2_runner.extract_tests(validation)[0]
+                arguments = (
+                    bytes.fromhex(normalized["publicKey"]),
+                    bytes.fromhex(normalized["userId"]),
+                    bytes.fromhex(normalized["msg"]),
+                    bytes.fromhex(normalized["signature"]),
+                )
+                if backend == "openssl":
+                    passed = sm2_runner.openssl_sm2_verify(openssl, *arguments)
+                elif backend == "gmssl":
+                    passed = sm2_runner.gmssl_sm2_verify("", *arguments)
+                else:
+                    openssl_result = sm2_runner.openssl_sm2_verify(openssl, *arguments)
+                    gmssl_result = sm2_runner.gmssl_sm2_verify("", *arguments)
+                    passed = openssl_result
+                    if openssl_result != gmssl_result:
+                        mismatches.append({
+                            "tcId": tc_id,
+                            "operation": "verify",
+                            "openssl": openssl_result,
+                            "gmssl": gmssl_result,
+                        })
+                response_tests.append({"tcId": tc_id, "testPassed": passed})
+                continue
+
+            private_key = bytes.fromhex(test["privateKey"])
+            sm2_cipher.private_key_pem(private_key)
+            ciphertext = bytes.fromhex(test["ciphertext"])
+            recovered: dict[str, bytes | None] = {}
+            selected = ["openssl", "gmssl"] if backend == "cross" else [backend]
+            for implementation in selected:
+                try:
+                    if implementation == "openssl":
+                        encoded = sm2_cipher.convert_ciphertext(
+                            ciphertext, group["ciphertextFormat"], "der"
+                        )
+                        recovered[implementation] = sm2_cipher.openssl_decrypt(
+                            openssl, private_key, encoded
+                        )
+                    else:
+                        encoded = sm2_cipher.convert_ciphertext(
+                            ciphertext, group["ciphertextFormat"], "c1c3c2"
+                        )
+                        recovered[implementation] = sm2_cipher.gmssl_decrypt(
+                            "", private_key, encoded
+                        )
+                except sm2_cipher.CipherError:
+                    recovered[implementation] = None
+            preferred = recovered["openssl" if backend != "gmssl" else "gmssl"]
+            if backend == "cross" and recovered["openssl"] != recovered["gmssl"]:
+                mismatches.append({
+                    "tcId": tc_id,
+                    "operation": "decrypt",
+                    "openssl": None if recovered["openssl"] is None else recovered["openssl"].hex(),
+                    "gmssl": None if recovered["gmssl"] is None else recovered["gmssl"].hex(),
+                })
+            result: dict[str, Any] = {"tcId": tc_id, "testPassed": preferred is not None}
+            if preferred is not None:
+                result["pt"] = preferred.hex()
+            response_tests.append(result)
+        response_groups.append({"tgId": group["tgId"], "tests": response_tests})
+    return response_groups
+
+
 def process_request(
     version: dict[str, Any], request: dict[str, Any], openssl: str, backend: str
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -497,6 +618,7 @@ def process_request(
     algorithm = str(request.get("algorithm", "")).upper()
     mismatches: list[dict[str, Any]] = []
     handlers = {
+        "SM2": _sm2_response,
         "SM3": _sm3_response,
         "HMAC-SM3": _hmac_response,
         "SM4": _sm4_response,
@@ -557,6 +679,8 @@ PROCESS_ERRORS = (
     hmac_sm3_runner.RunnerError,
     authenticated_sm4_runner.RunnerError,
     authenticated_sm4.FormatError,
+    sm2_runner.RunnerError,
+    sm2_cipher.CipherError,
 )
 
 

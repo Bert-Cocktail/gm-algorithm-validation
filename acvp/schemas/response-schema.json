@@ -16,13 +16,14 @@
       "type": "object",
       "properties": {
         "vsId": {"type": "integer", "minimum": 0},
-        "algorithm": {"enum": ["SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"]},
+        "algorithm": {"enum": ["SM2", "SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"]},
         "testGroups": {"type": "array", "minItems": 1},
         "localDiagnostics": {"type": "object"}
       },
       "required": ["vsId", "algorithm", "testGroups"],
       "additionalProperties": false,
       "allOf": [
+        {"if": {"properties": {"algorithm": {"const": "SM2"}}}, "then": {"properties": {"testGroups": {"items": {"$ref": "#/$defs/sm2Group"}}}}},
         {"if": {"properties": {"algorithm": {"const": "SM3"}}}, "then": {"properties": {"testGroups": {"items": {"$ref": "#/$defs/mdGroup"}}}}},
         {"if": {"properties": {"algorithm": {"const": "HMAC-SM3"}}}, "then": {"properties": {"testGroups": {"items": {"$ref": "#/$defs/macGroup"}}}}},
         {"if": {"properties": {"algorithm": {"const": "SM4"}}}, "then": {"properties": {"testGroups": {"items": {"$ref": "#/$defs/cipherGroup"}}}}},
@@ -44,6 +45,12 @@
       "allOf": [
         {"$ref": "#/$defs/resultGroup"},
         {"properties": {"tests": {"items": {"type": "object", "properties": {"tcId": {"type": "integer"}, "md": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, "required": ["tcId", "md"], "additionalProperties": false}}}}
+      ]
+    },
+    "sm2Group": {
+      "allOf": [
+        {"$ref": "#/$defs/resultGroup"},
+        {"properties": {"tests": {"items": {"type": "object", "properties": {"tcId": {"type": "integer"}, "testPassed": {"type": "boolean"}, "pt": {"type": "string", "pattern": "^(?:[0-9a-f]{2})+$"}}, "required": ["tcId", "testPassed"], "additionalProperties": false}}}}
       ]
     },
     "macGroup": {

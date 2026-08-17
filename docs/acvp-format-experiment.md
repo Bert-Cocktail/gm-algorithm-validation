@@ -8,12 +8,13 @@
 
 ## 运行方法
 
-仓库在 `acvp/requests` 与 `acvp/responses` 中分别提供 SM3、HMAC-SM3 和 SM4 请求与响应样例：
+仓库在 `acvp/requests` 与 `acvp/responses` 中提供 SM2、SM3、HMAC-SM3 和 SM4 请求与响应样例：
 
 ```powershell
 python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-response.json
 python acvp_adapter.py acvp\requests\hmac-sm3-request.json --output results\hmac-sm3-response.json
 python acvp_adapter.py acvp\requests\sm4-request.json --output results\sm4-response.json
+python acvp_adapter.py acvp\requests\sm2-request.json --output results\sm2-response.json --backend cross --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
 ```
 
 选择后端：
@@ -76,12 +77,15 @@ python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-respo
 
 | `algorithm` | 请求主要字段 | 响应字段 |
 |---|---|---|
+| `SM2` | 组级 `operation`；验签输入 ID、消息、公钥、DER 签名，解密输入私钥和密文 | `testPassed`，解密成功时返回 `pt` |
 | `SM3` | `msg`, `msgLen` | `md` |
 | `HMAC-SM3` | `key`, `msg`, `msgLen` | `mac` |
 | `SM4` | 组级 `mode`, `direction`；测试级 `key`, `iv`, `pt` 或 `ct` | 加密返回 `ct`，解密返回 `pt` |
 | `SM4-CTR-HMAC-SM3` | `sm4Key`, `hmacKey`, `iv`, `pt` | `ct`, `tag` |
 
 SM4 的 ECB 组不需要 `iv`；CBC 和 CTR 需要 128 bit IV。SM4-CTR-HMAC-SM3 是本项目的实验组合，不是这里声称的 ACVP 标准算法标识。
+
+SM2 当前只提供可重复复核的 `verify` 和 `decrypt`。随机加密每次会产生不同密文，因此没有直接加入按字节比较的 `--verify-responses` 流程。样例请求中的私钥是公开的测试专用 `d=1`，不得替换为或提交真实业务私钥。
 
 组级 `testType` 可写为 `AFT`、`MCT` 或 `LDT`。当前只有 `AFT` 具备正确执行逻辑；`MCT` 与 `LDT` 会被识别并明确拒绝为“尚未实现”，不会套用普通 AFT 计算。HMAC-SM3 组还声明 `keyLen` 与 `macLen`，SM4 组声明 `direction`、`keyLen` 与 `mode`。`msgLen` 位于具体测试用例中，因为同一组可以包含不同长度的消息。MCT 调研见 [SM3/SM4 MCT 规则调研](mct-research.md)。
 
@@ -97,7 +101,7 @@ SM4 的 ECB 组不需要 `iv`；CBC 和 CTR 需要 128 bit IV。SM4-CTR-HMAC-SM3
 python acvp_adapter.py --capabilities
 ```
 
-输出包含四种算法的 `revision`、`testTypes`、消息或密钥长度限制，以及 SM4 的模式、方向、IV 和负载长度约束。处理请求时会实际使用这些范围，额外检查消息长度、HMAC 密钥长度、SM4 模式与负载，以及认证组合参数。
+输出包含五种算法的 `revision`、`testTypes` 和长度限制，以及 SM2 的曲线、操作和编码格式、SM4 的模式与方向。处理请求时会实际使用这些约束。
 
 每项算法还包含 `identifierMapping`：
 
@@ -126,11 +130,11 @@ python acvp_adapter.py --all `
   "status": "passed",
   "exitCode": 0,
   "summary": {
-    "files": 3,
-    "passedFiles": 3,
+    "files": 4,
+    "passedFiles": 4,
     "failedFiles": 0,
     "errorFiles": 0,
-    "tests": 5,
+    "tests": 9,
     "backendMismatches": 0
   },
   "files": []
@@ -169,10 +173,11 @@ python experiment_report.py `
   --vector-summary results\summary.json `
   --acvp-summary results\acvp\summary.json `
   --manifest results\acvp\manifest.json `
+  --capabilities results\acvp\capabilities.json `
   --output reports\experiment-report.md
 ```
 
-报告记录 Python、OpenSSL、gmssl、Git 提交、通过率和请求哈希，并保留非认证范围说明。`.github/workflows/validate.yml` 在 push 和 pull request 时自动运行 183 项测试、64 个回归向量、ACVP 批量处理、manifest、响应复核和报告生成。
+报告记录 Python、OpenSSL、gmssl、Git 提交、通过率、请求哈希和能力快照，并保留非认证范围说明。CI 自动归档结构化回归结果、四份请求响应、能力 JSON、manifest 和 Markdown 报告。
 
 ## 交叉后端诊断
 
@@ -207,11 +212,11 @@ python experiment_report.py `
 
 ## 测试覆盖
 
-`tests/test_acvp_adapter.py` 包含 12 项测试，覆盖 SM3、HMAC-SM3、SM4 加解密、认证组合、重复 ID 与覆盖保护、多个交叉后端不一致的完整收集、能力描述与 Schema、MCT 拒绝、能力范围及标识映射。
+`tests/test_acvp_adapter.py` 包含 13 项测试，覆盖 SM2 验签与解密、SM3、HMAC-SM3、SM4、认证组合、能力描述与 Schema 等。
 
 `tests/test_acvp_batch.py` 包含 8 项测试，覆盖三类样例批量成功、错误后继续、后端不一致汇总、跨文件重复 `vsId`、目录保护，以及响应复核的成功、篡改和缺失场景。
 
-`tests/test_acvp_manifest.py` 包含 4 项测试，`tests/test_experiment_report.py` 包含 3 项测试。
+`tests/test_acvp_manifest.py` 包含 4 项测试，`tests/test_experiment_report.py` 包含 4 项测试。
 
 ```powershell
 python -m unittest tests.test_acvp_adapter -v

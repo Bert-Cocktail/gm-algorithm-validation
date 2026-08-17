@@ -67,8 +67,8 @@
 ### 本地 ACVP 风格请求与响应
 
 - `acvp_adapter.py` 接收 `[acvVersion, vectorSet]` 两对象数组
-- 请求只包含输入，响应按 `vsId`、`tgId`、`tcId` 返回 `md`、`mac`、`ct` 或 `pt`
-- 支持 SM3、HMAC-SM3、SM4，以及本项目实验性的 SM4-CTR-HMAC-SM3
+- 请求只包含输入，响应按 `vsId`、`tgId`、`tcId` 返回计算结果或 `testPassed`
+- 支持 SM2 签名验证与解密、SM3、HMAC-SM3、SM4，以及实验性的 SM4-CTR-HMAC-SM3
 - 支持 `openssl`、`gmssl`、`cross` 后端；交叉不一致写入本地扩展 `localDiagnostics`
 - 请求和生成的响应都会通过仓库内 JSON Schema 校验
 - `--capabilities` 输出算法、模式、方向及长度约束等机器可读能力
@@ -76,12 +76,12 @@
 - 请求会与能力描述交叉检查；MCT/LDT 可识别但尚不执行
 - `acvp_manifest.py` 记录请求 SHA-256、`vsId`、算法和测试数量
 - `--verify-responses` 可重新计算并复核已保存响应
-- `experiment_report.py` 可生成包含环境、结果和请求哈希的归档报告
+- `experiment_report.py` 可生成包含环境、结果、请求哈希和能力快照的归档报告
 - GitHub Actions 自动执行测试、两类批量验证、复核和报告生成
 
 两个执行器都会输出每个测试用例的 PASS/FAIL，并区分测试失败与输入、环境错误。
 
-当前尚未实现：C API、padding、生产级认证文件格式、SM2 的 ACVP 风格请求、性能测试和 ACVTS 网络接入。ACVP 风格适配器是本地格式实验，不是 ACVTS 客户端或认证结果。
+当前尚未实现：C API、padding、生产级认证文件格式、SM2 随机加密请求、性能测试和 ACVTS 网络接入。ACVP 风格适配器是本地格式实验，不是 ACVTS 客户端或认证结果。
 
 ## 项目结构
 
@@ -118,10 +118,12 @@ gm-algorithm-validation/
 │   │   └── response-schema.json
 │   ├── requests/
 │   │   ├── sm3-request.json
+│   │   ├── sm2-request.json
 │   │   ├── hmac-sm3-request.json
 │   │   └── sm4-request.json
 │   └── responses/
 │       ├── sm3-response.json
+│       ├── sm2-response.json
 │       ├── hmac-sm3-response.json
 │       └── sm4-response.json
 ├── tests/
@@ -338,6 +340,7 @@ python runner.py vectors\sm3.json --backend cross --result-json results\sm3-cros
 
 ```powershell
 python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-response.json --backend cross
+python acvp_adapter.py acvp\requests\sm2-request.json --output results\sm2-response.json --backend cross --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
 ```
 
 请求使用 `acvVersion`、`vsId`、`testGroups`、`tgId` 和 `tcId` 层级，响应保留相同标识并返回计算结果。完整字段与限制参见 [ACVP 风格格式实验](docs/acvp-format-experiment.md)。
@@ -421,7 +424,7 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 183 项测试：
+当前共有 185 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -439,15 +442,15 @@ python -m unittest discover -s tests -v
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
 - 5 项批量向量执行与汇总测试
-- 12 项 ACVP 风格请求、响应、Schema、能力约束和标识映射测试
+- 13 项 ACVP 风格请求、响应、Schema、能力约束和标识映射测试
 - 8 项 ACVP 请求批量处理、汇总和响应复核测试
 - 4 项请求 manifest 测试
-- 3 项归档实验报告测试
+- 4 项归档实验报告测试
 
 本次实测结果：
 
 ```text
-Ran 183 tests in ...
+Ran 185 tests in ...
 
 OK
 ```
@@ -534,4 +537,4 @@ SM4 测试用例示例：
 1. 使用 OpenSSL EVP API 编写 C 语言 SM3、SM4 程序。
 2. 让同一批 JSON 向量验证命令行后端和 C 后端。
 3. 研究操作系统密钥库、流式大文件处理和标准化认证加密格式。
-4. 继续开展 SM2 公钥加密、私钥解密以及 C1C3C2/C1C2C3 格式实验。
+4. 研究可复核的 SM2 随机加密请求表示以及更接近正式算法注册的参数映射。

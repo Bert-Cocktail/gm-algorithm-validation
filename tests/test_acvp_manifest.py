@@ -30,10 +30,15 @@ class TestAcvpManifest(unittest.TestCase):
             manifest = json.loads(output.read_text(encoding="utf-8"))
 
         self.assertEqual(exit_code, acvp_adapter.EXIT_SUCCESS)
-        self.assertEqual(manifest["summary"], {"files": 3, "tests": 5})
+        self.assertEqual(manifest["summary"], {"files": 4, "tests": 9})
         self.assertEqual(
             [item["file"] for item in manifest["files"]],
-            ["hmac-sm3-request.json", "sm3-request.json", "sm4-request.json"],
+            [
+                "hmac-sm3-request.json",
+                "sm2-request.json",
+                "sm3-request.json",
+                "sm4-request.json",
+            ],
         )
         for item in manifest["files"]:
             expected = hashlib.sha256((SAMPLES / item["file"]).read_bytes()).hexdigest()

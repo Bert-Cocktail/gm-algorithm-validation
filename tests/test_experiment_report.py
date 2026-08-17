@@ -106,6 +106,27 @@ class TestExperimentReport(unittest.TestCase):
 
         self.assertEqual(exit_code, acvp_adapter.EXIT_INPUT_ERROR)
 
+    def test_capabilities_are_included_when_supplied(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+            vector, acvp, manifest = self.write_inputs(directory)
+            capabilities = directory / "capabilities.json"
+            capabilities.write_text(
+                json.dumps(acvp_adapter.CAPABILITIES), encoding="utf-8"
+            )
+            output = directory / "report.md"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                exit_code = experiment_report.main([
+                    "--vector-summary", str(vector), "--acvp-summary", str(acvp),
+                    "--manifest", str(manifest), "--capabilities", str(capabilities),
+                    "--output", str(output),
+                ])
+            report = output.read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, acvp_adapter.EXIT_SUCCESS)
+        self.assertIn("能力快照", report)
+        self.assertIn("SM2", report)
+
     def test_report_cannot_overwrite_input(self) -> None:
         with tempfile.TemporaryDirectory() as directory_name:
             directory = Path(directory_name)

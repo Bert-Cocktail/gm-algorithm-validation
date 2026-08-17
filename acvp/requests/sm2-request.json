@@ -1,0 +1,55 @@
+[
+  {
+    "acvVersion": "1.0"
+  },
+  {
+    "vsId": 4,
+    "algorithm": "SM2",
+    "testGroups": [
+      {
+        "tgId": 1,
+        "testType": "AFT",
+        "curve": "sm2p256v1",
+        "operation": "verify",
+        "signatureFormat": "der",
+        "tests": [
+          {
+            "tcId": 1,
+            "userId": "31323334353637383132333435363738",
+            "msg": "6d65737361676520646967657374",
+            "msgLen": 112,
+            "publicKey": "0432c4ae2c1f1981195f9904466a39c9948fe30bbff2660be1715a4589334c74c7bc3736a2f4f6779c59bdcee36b692153d0a9877cc62a474002df32e52139f0a0",
+            "signature": "3045022100962e02e24ec3266f82d846abcdac8331f74383ddb0dceaddd1f400a4dd3036af022034e8fe8e589e6cc83e93dcaa1929be66bd602dc6b8748d26c0e3f9b22e52853b"
+          },
+          {
+            "tcId": 2,
+            "userId": "31323334353637383132333435363738",
+            "msg": "6d65737361676520646967657375",
+            "msgLen": 112,
+            "publicKey": "0432c4ae2c1f1981195f9904466a39c9948fe30bbff2660be1715a4589334c74c7bc3736a2f4f6779c59bdcee36b692153d0a9877cc62a474002df32e52139f0a0",
+            "signature": "3045022100962e02e24ec3266f82d846abcdac8331f74383ddb0dceaddd1f400a4dd3036af022034e8fe8e589e6cc83e93dcaa1929be66bd602dc6b8748d26c0e3f9b22e52853b"
+          }
+        ]
+      },
+      {
+        "tgId": 2,
+        "testType": "AFT",
+        "curve": "sm2p256v1",
+        "operation": "decrypt",
+        "ciphertextFormat": "c1c3c2",
+        "tests": [
+          {
+            "tcId": 3,
+            "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+            "ciphertext": "0456cefd60d7c87c000d58ef57fa73ba4d9c0dfa08c08a7331495c2e1da3f2bd5231b7e7e6cc8189f668535ce0f8eaf1bd6de84c182f6c8e716f780d3a970a23c31c46181090c091022e9cf9dafbb00330d9f68fc57e65641ed698b0f7c55c350fb0e49e77d6bd057e8ded5808e21f01c9fb0274"
+          },
+          {
+            "tcId": 4,
+            "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+            "ciphertext": "0456cefd60d7c87c000d58ef57fa73ba4d9c0dfa08c08a7331495c2e1da3f2bd5231b7e7e6cc8189f668535ce0f8eaf1bd6de84c182f6c8e716f780d3a970a23c21c46181090c091022e9cf9dafbb00330d9f68fc57e65641ed698b0f7c55c350fb0e49e77d6bd057e8ded5808e21f01c9fb0274"
+          }
+        ]
+      }
+    ]
+  }
+]

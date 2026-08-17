@@ -22,6 +22,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--vector-summary", type=Path, required=True)
     parser.add_argument("--acvp-summary", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--capabilities", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--openssl", default="openssl")
     return parser.parse_args(argv)
@@ -74,6 +75,7 @@ def build_report(
     acvp_summary: dict[str, Any],
     manifest: dict[str, Any],
     environment: dict[str, str],
+    capabilities: dict[str, Any] | None = None,
 ) -> str:
     vector = vector_summary.get("summary", {})
     acvp = acvp_summary.get("summary", {})
@@ -119,6 +121,24 @@ def build_report(
             f"| {item['file']} | `{item['sha256']}` | {item['vsId']} | "
             f"{item['algorithm']} | {item['tests']} |"
         )
+    if capabilities is not None:
+        lines.extend(
+            [
+                "",
+                "## 能力快照",
+                "",
+                "| 本地算法 | 标准或实验说明 | 操作 | ACVP 标识状态 |",
+                "|---|---|---|---|",
+            ]
+        )
+        for item in capabilities.get("algorithms", []):
+            mapping = item.get("identifierMapping", {})
+            operations = item.get("operations", item.get("directions", []))
+            lines.append(
+                f"| {item.get('algorithm', '')} | {mapping.get('standardIdentifier', '')} | "
+                f"{', '.join(operations) if operations else 'AFT'} | "
+                f"{mapping.get('acvpStatus', '')} |"
+            )
     lines.extend(
         [
             "",
@@ -153,13 +173,24 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         inputs = [args.vector_summary, args.acvp_summary, args.manifest]
+        if args.capabilities is not None:
+            inputs.append(args.capabilities)
         if any(args.output.resolve() == path.resolve() for path in inputs):
             raise acvp_adapter.AdapterError("report output must not overwrite an input")
+        capabilities = (
+            _read_object(args.capabilities, "capabilities")
+            if args.capabilities is not None else None
+        )
+        if capabilities is not None:
+            acvp_adapter.validate_schema(
+                capabilities, acvp_adapter.CAPABILITIES_SCHEMA, "capabilities"
+            )
         report = build_report(
             _read_object(args.vector_summary, "vector summary"),
             _read_object(args.acvp_summary, "ACVP summary"),
             _read_object(args.manifest, "manifest"),
             collect_environment(args.openssl),
+            capabilities,
         )
         if not args.output.parent.is_dir():
             raise acvp_adapter.AdapterError(

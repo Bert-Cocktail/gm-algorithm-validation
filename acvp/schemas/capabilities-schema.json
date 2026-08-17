@@ -48,7 +48,7 @@
     "algorithm": {
       "type": "object",
       "properties": {
-        "algorithm": {"enum": ["SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"]},
+        "algorithm": {"enum": ["SM2", "SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"]},
         "identifierMapping": {"$ref": "#/$defs/mapping"},
         "revision": {"type": "string", "minLength": 1},
         "testTypes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/testType"}},
@@ -57,6 +57,12 @@
         "keyLength": {"oneOf": [{"type": "integer", "minimum": 1}, {"$ref": "#/$defs/range"}]},
         "macLength": {"type": "integer", "minimum": 1},
         "directions": {"type": "array", "items": {"enum": ["encrypt", "decrypt"]}, "minItems": 1},
+        "curve": {"const": "sm2p256v1"},
+        "operations": {"type": "array", "items": {"enum": ["verify", "decrypt"]}, "minItems": 1, "uniqueItems": true},
+        "signatureFormats": {"type": "array", "items": {"const": "der"}, "minItems": 1},
+        "ciphertextFormats": {"type": "array", "items": {"enum": ["der", "c1c3c2", "c1c2c3"]}, "minItems": 1, "uniqueItems": true},
+        "privateKeyLength": {"type": "integer", "minimum": 1},
+        "publicKeyLength": {"type": "integer", "minimum": 1},
         "modes": {"type": "object"},
         "sm4KeyLength": {"type": "integer", "minimum": 1},
         "hmacKeyLength": {"type": "integer", "minimum": 1},

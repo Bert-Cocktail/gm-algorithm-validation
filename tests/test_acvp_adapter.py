@@ -63,6 +63,26 @@ class TestAcvpAdapter(unittest.TestCase):
             "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0",
         )
 
+    def test_sm2_verify_and_decrypt_response(self) -> None:
+        request = json.loads(
+            (Path(__file__).parents[1] / "acvp" / "requests" / "sm2-request.json")
+            .read_text(encoding="utf-8")
+        )[1]
+
+        exit_code, response = self.run_request(request, "--backend", "gmssl")
+        groups = response[1]["testGroups"]
+
+        self.assertEqual(exit_code, acvp_adapter.EXIT_SUCCESS)
+        self.assertEqual(
+            [item["testPassed"] for item in groups[0]["tests"]], [True, False]
+        )
+        self.assertEqual(
+            groups[1]["tests"][0]["pt"],
+            "656e6372797074696f6e207374616e64617264",
+        )
+        self.assertFalse(groups[1]["tests"][1]["testPassed"])
+        self.assertNotIn("pt", groups[1]["tests"][1])
+
     def test_hmac_request_produces_mac(self) -> None:
         request = {
             "vsId": 2,
@@ -224,7 +244,7 @@ class TestAcvpAdapter(unittest.TestCase):
         self.assertTrue(capabilities["localFormat"])
         self.assertEqual(
             [item["algorithm"] for item in capabilities["algorithms"]],
-            ["SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"],
+            ["SM2", "SM3", "HMAC-SM3", "SM4", "SM4-CTR-HMAC-SM3"],
         )
         for algorithm in capabilities["algorithms"]:
             mapping = algorithm["identifierMapping"]
@@ -267,7 +287,10 @@ class TestAcvpAdapter(unittest.TestCase):
                 }
             ],
         }
-        sm3_capability = acvp_adapter.CAPABILITIES["algorithms"][0]
+        sm3_capability = next(
+            item for item in acvp_adapter.CAPABILITIES["algorithms"]
+            if item["algorithm"] == "SM3"
+        )
 
         with patch.dict(sm3_capability["messageLength"], {"max": 8}):
             exit_code, response = self.run_request(request)

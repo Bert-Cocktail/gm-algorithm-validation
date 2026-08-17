@@ -353,6 +353,7 @@ python runner.py vectors\hmac-sm3.json
 
 ```powershell
 python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-response.json --backend cross
+python acvp_adapter.py acvp\requests\sm2-request.json --output results\sm2-response.json --backend cross --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
 ```
 
 批量处理：
@@ -367,7 +368,7 @@ python acvp_adapter.py --all --request-dir acvp\requests --response-dir results\
 python acvp_adapter.py --capabilities
 ```
 
-请求会同时经过 JSON Schema、现有算法参数校验和能力范围校验。当前执行 `AFT`；`MCT`、`LDT` 仅识别但尚未实现。能力中的 `identifierMapping.acvpAlgorithm` 当前为 `null`，表示项目没有断言正式 NIST ACVP 注册标识。详细格式见 `docs/acvp-format-experiment.md`，权威规则调研见 `docs/mct-research.md`。
+请求会同时经过 JSON Schema、现有算法参数校验和能力范围校验。SM2 支持确定性的签名验证和私钥解密请求；随机加密暂不进入可复核响应协议。当前执行 `AFT`；`MCT`、`LDT` 仅识别但尚未实现。能力中的 `identifierMapping.acvpAlgorithm` 当前为 `null`，表示项目没有断言正式 NIST ACVP 注册标识。
 
 生成清单、复核响应并生成报告：
 
@@ -651,7 +652,7 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 183 项测试：
+当前共有 185 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
@@ -669,15 +670,15 @@ python -m unittest discover -s tests -v
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
 - 5 项批量向量执行与汇总测试
-- 12 项 ACVP 风格请求、响应、Schema、能力约束和标识映射测试
+- 13 项 ACVP 风格请求、响应、Schema、能力约束和标识映射测试
 - 8 项 ACVP 请求批量处理、汇总和响应复核测试
 - 4 项请求 manifest 测试
-- 3 项归档实验报告测试
+- 4 项归档实验报告测试
 
 当前预期结果：
 
 ```text
-Ran 183 tests in ...
+Ran 185 tests in ...
 
 OK
 ```
@@ -919,5 +920,5 @@ git commit -m "描述本次修改"
 4. 若获得明确覆盖 SM3/SM4 的权威规范，实现对应 MCT、LDT 规则及正式参数集映射。
 5. 为 HMAC-SM3 增加独立正式标准向量。
 6. 研究流式大文件处理、操作系统密钥库和标准化认证加密容器。
-7. 为 SM2 增加本地 ACVP 风格请求、更多与现行 `sm2p256v1` 完全匹配的公开标准向量。
+7. 为 SM2 增加可复核的随机加密请求表示、更多与现行 `sm2p256v1` 完全匹配的公开标准向量。
 8. 在具备授权和合规条件后，另行研究 ACVTS 注册、会话和传输流程。

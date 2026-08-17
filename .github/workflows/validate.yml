@@ -34,6 +34,8 @@ jobs:
 
       - name: Process and verify ACVP-style requests
         run: |
+          mkdir -p results/acvp
+          python acvp_adapter.py --capabilities > results/acvp/capabilities.json
           python acvp_adapter.py --all --request-dir acvp/requests --response-dir results/acvp --backend cross
           python acvp_manifest.py --request-dir acvp/requests --output results/acvp/manifest.json
           python acvp_adapter.py --verify-responses --request-dir acvp/requests --response-dir results/acvp --backend cross
@@ -41,7 +43,7 @@ jobs:
       - name: Generate archival report
         run: |
           mkdir -p reports
-          python experiment_report.py --vector-summary results/summary.json --acvp-summary results/acvp/summary.json --manifest results/acvp/manifest.json --output reports/ci-experiment-report.md
+          python experiment_report.py --vector-summary results/summary.json --acvp-summary results/acvp/summary.json --manifest results/acvp/manifest.json --capabilities results/acvp/capabilities.json --output reports/ci-experiment-report.md
 
       - name: Upload validation artifacts
         uses: actions/upload-artifact@v4
