@@ -72,7 +72,7 @@ OK
 全项目测试结果：
 
 ```text
-Ran 186 tests in ...
+Ran 192 tests in ...
 
 OK
 ```

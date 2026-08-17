@@ -58,7 +58,7 @@
         "macLength": {"type": "integer", "minimum": 1},
         "directions": {"type": "array", "items": {"enum": ["encrypt", "decrypt"]}, "minItems": 1},
         "curve": {"const": "sm2p256v1"},
-        "operations": {"type": "array", "items": {"enum": ["verify", "decrypt"]}, "minItems": 1, "uniqueItems": true},
+        "operations": {"type": "array", "items": {"enum": ["verify", "encrypt", "decrypt"]}, "minItems": 1, "uniqueItems": true},
         "signatureFormats": {"type": "array", "items": {"const": "der"}, "minItems": 1},
         "ciphertextFormats": {"type": "array", "items": {"enum": ["der", "c1c3c2", "c1c2c3"]}, "minItems": 1, "uniqueItems": true},
         "privateKeyLength": {"type": "integer", "minimum": 1},

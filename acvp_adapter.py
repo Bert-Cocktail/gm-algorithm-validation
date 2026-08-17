@@ -48,14 +48,14 @@ CAPABILITIES: dict[str, Any] = {
             "algorithm": "SM2",
             "identifierMapping": {
                 "localAlgorithm": "SM2",
-                "standardIdentifier": "GB/T 32918 local verification and decryption experiment",
+                "standardIdentifier": "GB/T 32918 local verification, encryption, and decryption experiment",
                 "acvpAlgorithm": None,
                 "acvpStatus": "no-identifier-asserted",
             },
             "revision": "GB/T 32918",
             "testTypes": TEST_TYPES,
             "curve": "sm2p256v1",
-            "operations": ["verify", "decrypt"],
+            "operations": ["verify", "encrypt", "decrypt"],
             "signatureFormats": ["der"],
             "ciphertextFormats": ["der", "c1c3c2", "c1c2c3"],
             "messageLength": {"min": 0, "max": 1048576, "increment": 8},
@@ -237,6 +237,17 @@ def _validate_group_parameters(request: dict[str, Any]) -> None:
                     )
                     if len(test["msg"]) * 4 != test["msgLen"]:
                         raise AdapterError(f"tcId={test['tcId']}: msg length does not match msgLen")
+            elif operation == "encrypt":
+                if group["ciphertextFormat"] not in capability["ciphertextFormats"]:
+                    raise AdapterError(f"tgId={tg_id}: unsupported SM2 ciphertext format")
+                for test in group["tests"]:
+                    _validate_range(
+                        test["msgLen"], capability["messageLength"], "msgLen", test["tcId"]
+                    )
+                    if len(test["msg"]) * 4 != test["msgLen"]:
+                        raise AdapterError(f"tcId={test['tcId']}: msg length does not match msgLen")
+                    sm2_cipher.public_key_pem(bytes.fromhex(test["publicKey"]))
+                    sm2_cipher.private_key_pem(bytes.fromhex(test["privateKey"]))
             else:
                 if group["ciphertextFormat"] not in capability["ciphertextFormats"]:
                     raise AdapterError(f"tgId={tg_id}: unsupported SM2 ciphertext format")
@@ -571,6 +582,43 @@ def _sm2_response(
                 response_tests.append({"tcId": tc_id, "testPassed": passed})
                 continue
 
+            if operation == "encrypt":
+                public_key = bytes.fromhex(test["publicKey"])
+                private_key = bytes.fromhex(test["privateKey"])
+                message = bytes.fromhex(test["msg"])
+                ciphertexts: dict[str, bytes] = {}
+                selected = ["openssl", "gmssl"] if backend == "cross" else [backend]
+                for implementation in selected:
+                    if implementation == "openssl":
+                        der = sm2_cipher.openssl_encrypt(openssl, public_key, message)
+                        recovered = sm2_cipher.openssl_decrypt(openssl, private_key, der)
+                        ciphertexts[implementation] = sm2_cipher.convert_ciphertext(
+                            der, "der", group["ciphertextFormat"]
+                        )
+                    else:
+                        raw = sm2_cipher.gmssl_encrypt("", public_key, message)
+                        recovered = sm2_cipher.gmssl_decrypt("", private_key, raw)
+                        ciphertexts[implementation] = sm2_cipher.convert_ciphertext(
+                            raw, "c1c3c2", group["ciphertextFormat"]
+                        )
+                    if recovered != message:
+                        mismatches.append({
+                            "tcId": tc_id,
+                            "operation": "encryptRoundTrip",
+                            "backend": implementation,
+                            "result": "plaintext-mismatch",
+                        })
+                preferred_backend = "gmssl" if backend == "gmssl" else "openssl"
+                response_tests.append({
+                    "tcId": tc_id,
+                    "testPassed": not any(
+                        item["tcId"] == tc_id and item["operation"] == "encryptRoundTrip"
+                        for item in mismatches
+                    ),
+                    "ct": ciphertexts[preferred_backend].hex(),
+                })
+                continue
+
             private_key = bytes.fromhex(test["privateKey"])
             sm2_cipher.private_key_pem(private_key)
             ciphertext = bytes.fromhex(test["ciphertext"])
@@ -802,6 +850,50 @@ def _load_response(path: Path) -> list[dict[str, Any]]:
     return response
 
 
+def _responses_match(
+    request: dict[str, Any], expected: list[dict[str, Any]], actual: list[dict[str, Any]],
+    openssl: str, backend: str,
+) -> bool:
+    """Compare responses while semantically validating randomized SM2 ciphertexts."""
+    expected_copy = json.loads(json.dumps(expected))
+    actual_copy = json.loads(json.dumps(actual))
+    expected_groups = {group["tgId"]: group for group in expected_copy[1]["testGroups"]}
+    actual_groups = {group["tgId"]: group for group in actual_copy[1]["testGroups"]}
+    for group in request["testGroups"]:
+        if request["algorithm"].upper() != "SM2" or group.get("operation") != "encrypt":
+            continue
+        expected_tests = {test["tcId"]: test for test in expected_groups[group["tgId"]]["tests"]}
+        actual_tests = {test["tcId"]: test for test in actual_groups[group["tgId"]]["tests"]}
+        for request_test in group["tests"]:
+            tc_id = request_test["tcId"]
+            response_test = actual_tests.get(tc_id, {})
+            if not response_test.get("testPassed") or "ct" not in response_test:
+                return False
+            ciphertext = bytes.fromhex(response_test["ct"])
+            private_key = bytes.fromhex(request_test["privateKey"])
+            message = bytes.fromhex(request_test["msg"])
+            selected = ["openssl", "gmssl"] if backend == "cross" else [backend]
+            try:
+                for implementation in selected:
+                    if implementation == "openssl":
+                        encoded = sm2_cipher.convert_ciphertext(
+                            ciphertext, group["ciphertextFormat"], "der"
+                        )
+                        recovered = sm2_cipher.openssl_decrypt(openssl, private_key, encoded)
+                    else:
+                        encoded = sm2_cipher.convert_ciphertext(
+                            ciphertext, group["ciphertextFormat"], "c1c3c2"
+                        )
+                        recovered = sm2_cipher.gmssl_decrypt("", private_key, encoded)
+                    if recovered != message:
+                        return False
+            except sm2_cipher.CipherError:
+                return False
+            expected_tests[tc_id]["ct"] = "<randomized>"
+            actual_tests[tc_id]["ct"] = "<randomized>"
+    return actual_copy == expected_copy
+
+
 def verify_responses(args: argparse.Namespace) -> int:
     if args.request_dir is None or args.response_dir is None:
         raise AdapterError("--verify-responses requires --request-dir and --response-dir")
@@ -829,7 +921,7 @@ def verify_responses(args: argparse.Namespace) -> int:
                 version, request, openssl, args.backend
             )
             actual = _load_response(response_path)
-            if actual != expected or backend_mismatches:
+            if not _responses_match(request, expected, actual, openssl, args.backend) or backend_mismatches:
                 mismatched += 1
                 print(f"[FAIL] {response_path.name}")
             else:

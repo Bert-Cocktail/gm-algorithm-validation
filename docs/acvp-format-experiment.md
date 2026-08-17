@@ -77,7 +77,7 @@ python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-respo
 
 | `algorithm` | 请求主要字段 | 响应字段 |
 |---|---|---|
-| `SM2` | 组级 `operation`；验签输入 ID、消息、公钥、DER 签名，解密输入私钥和密文 | `testPassed`，解密成功时返回 `pt` |
+| `SM2` | 组级 `operation`；验签输入 ID、消息、公钥、DER 签名；加密输入测试公私钥和消息；解密输入私钥和密文 | `testPassed`；加密返回 `ct`，解密成功时返回 `pt` |
 | `SM3` | `msg`, `msgLen` | `md` |
 | `HMAC-SM3` | `key`, `msg`, `msgLen` | `mac` |
 | `SM4` | 组级 `mode`, `direction`；测试级 `key`, `iv`, `pt` 或 `ct` | 加密返回 `ct`，解密返回 `pt` |
@@ -85,7 +85,7 @@ python acvp_adapter.py acvp\requests\sm3-request.json --output results\sm3-respo
 
 SM4 的 ECB 组不需要 `iv`；CBC 和 CTR 需要 128 bit IV。SM4-CTR-HMAC-SM3 是本项目的实验组合，不是这里声称的 ACVP 标准算法标识。
 
-SM2 当前只提供可重复复核的 `verify` 和 `decrypt`。随机加密每次会产生不同密文，因此没有直接加入按字节比较的 `--verify-responses` 流程。样例请求中的私钥是公开的测试专用 `d=1`，不得替换为或提交真实业务私钥。
+SM2 支持 `verify`、`encrypt` 和 `decrypt`。随机加密每次会产生不同密文，`cross` 模式要求 OpenSSL 与 GmSSL 分别完成加密回环，但不比较随机密文。`--verify-responses` 会解密已保存的 `ct` 并比较请求原文，再忽略随机密文字节进行其余字段比较。样例请求中的私钥是公开的测试专用 `d=1`，仅用于回环验证，不得替换为或提交真实业务私钥；正式加密接口通常只向加密方提供公钥。
 
 组级 `testType` 可写为 `AFT`、`MCT` 或 `LDT`。当前只有 `AFT` 具备正确执行逻辑；`MCT` 与 `LDT` 会被识别并明确拒绝为“尚未实现”，不会套用普通 AFT 计算。HMAC-SM3 组还声明 `keyLen` 与 `macLen`，SM4 组声明 `direction`、`keyLen` 与 `mode`。`msgLen` 位于具体测试用例中，因为同一组可以包含不同长度的消息。MCT 调研见 [SM3/SM4 MCT 规则调研](mct-research.md)。
 
@@ -212,7 +212,7 @@ python experiment_report.py `
 
 ## 测试覆盖
 
-`tests/test_acvp_adapter.py` 包含 13 项测试，覆盖 SM2 验签与解密、SM3、HMAC-SM3、SM4、认证组合、能力描述与 Schema 等。
+`tests/test_acvp_adapter.py` 包含 14 项测试，覆盖 SM2 验签、随机加密与解密、SM3、HMAC-SM3、SM4、认证组合、能力描述与 Schema 等。
 
 `tests/test_acvp_batch.py` 包含 8 项测试，覆盖三类样例批量成功、错误后继续、后端不一致汇总、跨文件重复 `vsId`、目录保护，以及响应复核的成功、篡改和缺失场景。
 

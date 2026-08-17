@@ -56,7 +56,7 @@
         "tgId": {"$ref": "#/$defs/positiveId"},
         "testType": {"const": "AFT"},
         "curve": {"const": "sm2p256v1"},
-        "operation": {"enum": ["verify", "decrypt"]},
+        "operation": {"enum": ["verify", "encrypt", "decrypt"]},
         "signatureFormat": {"const": "der"},
         "ciphertextFormat": {"enum": ["der", "c1c3c2", "c1c2c3"]},
         "tests": {
@@ -89,7 +89,9 @@
           },
           "else": {
             "required": ["ciphertextFormat"],
-            "properties": {"tests": {"items": {"required": ["privateKey", "ciphertext"]}}}
+            "if": {"properties": {"operation": {"const": "encrypt"}}},
+            "then": {"properties": {"tests": {"items": {"required": ["publicKey", "privateKey", "msg", "msgLen"]}}}},
+            "else": {"properties": {"tests": {"items": {"required": ["privateKey", "ciphertext"]}}}}
           }
         }
       ]

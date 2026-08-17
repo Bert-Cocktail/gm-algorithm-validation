@@ -32,6 +32,22 @@
         ]
       },
       {
+        "tgId": 3,
+        "testType": "AFT",
+        "curve": "sm2p256v1",
+        "operation": "encrypt",
+        "ciphertextFormat": "c1c3c2",
+        "tests": [
+          {
+            "tcId": 5,
+            "privateKey": "0000000000000000000000000000000000000000000000000000000000000001",
+            "publicKey": "0432c4ae2c1f1981195f9904466a39c9948fe30bbff2660be1715a4589334c74c7bc3736a2f4f6779c59bdcee36b692153d0a9877cc62a474002df32e52139f0a0",
+            "msg": "72616e646f6d20534d3220656e6372797074696f6e",
+            "msgLen": 168
+          }
+        ]
+      },
+      {
         "tgId": 2,
         "testType": "AFT",
         "curve": "sm2p256v1",

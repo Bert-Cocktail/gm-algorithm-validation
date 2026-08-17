@@ -29,6 +29,9 @@ jobs:
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
 
+      - name: Generate quick performance report
+        run: python benchmark.py --backend gmssl --quick --json results/benchmark.json --markdown reports/ci-benchmark.md
+
       - name: Run all regression vectors
         run: |
           if ! python runner.py --all --backend cross --result-dir results; then
@@ -57,3 +60,4 @@ jobs:
           path: |
             results/
             reports/ci-experiment-report.md
+            reports/ci-benchmark.md

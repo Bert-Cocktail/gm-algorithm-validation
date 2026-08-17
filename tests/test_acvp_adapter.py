@@ -70,18 +70,35 @@ class TestAcvpAdapter(unittest.TestCase):
         )[1]
 
         exit_code, response = self.run_request(request, "--backend", "gmssl")
-        groups = response[1]["testGroups"]
+        groups = {group["tgId"]: group for group in response[1]["testGroups"]}
 
         self.assertEqual(exit_code, acvp_adapter.EXIT_SUCCESS)
         self.assertEqual(
-            [item["testPassed"] for item in groups[0]["tests"]], [True, False]
+            [item["testPassed"] for item in groups[1]["tests"]], [True, False]
         )
         self.assertEqual(
-            groups[1]["tests"][0]["pt"],
+            groups[2]["tests"][0]["pt"],
             "656e6372797074696f6e207374616e64617264",
         )
-        self.assertFalse(groups[1]["tests"][1]["testPassed"])
-        self.assertNotIn("pt", groups[1]["tests"][1])
+        self.assertFalse(groups[2]["tests"][1]["testPassed"])
+        self.assertNotIn("pt", groups[2]["tests"][1])
+        self.assertTrue(groups[3]["tests"][0]["testPassed"])
+        ciphertext = bytes.fromhex(groups[3]["tests"][0]["ct"])
+        recovered = acvp_adapter.sm2_cipher.gmssl_decrypt(
+            "", bytes.fromhex(request["testGroups"][1]["tests"][0]["privateKey"]), ciphertext
+        )
+        self.assertEqual(recovered, b"random SM2 encryption")
+
+    def test_sm2_encryption_is_randomized(self) -> None:
+        request = json.loads(
+            (Path(__file__).parents[1] / "acvp" / "requests" / "sm2-request.json")
+            .read_text(encoding="utf-8")
+        )[1]
+        _, first = self.run_request(request, "--backend", "gmssl")
+        _, second = self.run_request(request, "--backend", "gmssl")
+        first_group = next(group for group in first[1]["testGroups"] if group["tgId"] == 3)
+        second_group = next(group for group in second[1]["testGroups"] if group["tgId"] == 3)
+        self.assertNotEqual(first_group["tests"][0]["ct"], second_group["tests"][0]["ct"])
 
     def test_hmac_request_produces_mac(self) -> None:
         request = {

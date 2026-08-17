@@ -15,6 +15,7 @@
 - `gmcrypto.py` 支持生成 PEM 密钥对、文件签名和验签
 - 支持 PEM 公钥加密、PEM 私钥解密，密文可选 DER、C1C3C2 或 C1C2C3
 - 支持三种 SM2 密文格式严格解析和相互转换，并验证 C3 完整性
+- ACVP 风格 SM2 随机加密请求会生成新密文，并以私钥回解验证代替固定密文比较
 - 新增加解密回环、篡改拒绝和公开附录格式转换向量
 - 私钥、公钥和签名均通过文件读写，不通过命令行传递私钥
 
@@ -68,7 +69,7 @@
 
 - `acvp_adapter.py` 接收 `[acvVersion, vectorSet]` 两对象数组
 - 请求只包含输入，响应按 `vsId`、`tgId`、`tcId` 返回计算结果或 `testPassed`
-- 支持 SM2 签名验证与解密、SM3、HMAC-SM3、SM4，以及实验性的 SM4-CTR-HMAC-SM3
+- 支持 SM2 签名验证、随机加密与解密、SM3、HMAC-SM3、SM4，以及实验性的 SM4-CTR-HMAC-SM3
 - 支持 `openssl`、`gmssl`、`cross` 后端；交叉不一致写入本地扩展 `localDiagnostics`
 - 请求和生成的响应都会通过仓库内 JSON Schema 校验
 - `--capabilities` 输出算法、模式、方向及长度约束等机器可读能力
@@ -81,7 +82,7 @@
 
 两个执行器都会输出每个测试用例的 PASS/FAIL，并区分测试失败与输入、环境错误。
 
-当前尚未实现：C API、padding、生产级认证文件格式、SM2 随机加密请求、性能测试和 ACVTS 网络接入。ACVP 风格适配器是本地格式实验，不是 ACVTS 客户端或认证结果。
+当前尚未实现：C API、padding、生产级认证文件格式和 ACVTS 网络接入。ACVP 风格适配器是本地格式实验，不是 ACVTS 客户端或认证结果；性能报告也是本机实验数据，不代表认证或跨机器性能保证。
 
 ## 项目结构
 
@@ -90,6 +91,7 @@ gm-algorithm-validation/
 ├── README.md
 ├── gmcrypto.py
 ├── runner.py
+├── benchmark.py
 ├── acvp_adapter.py
 ├── acvp_manifest.py
 ├── experiment_report.py
@@ -353,6 +355,17 @@ python acvp_adapter.py --capabilities
 
 普通请求会在执行前通过 `acvp/schemas/request-schema.json` 校验，生成的响应会在写入前通过 `response-schema.json` 校验，验证器使用 `jsonschema 4.25.1` 的 Draft 2020-12 实现。组级字段包括 `testType`，HMAC-SM3 还包括 `keyLen`、`macLen`，SM4 包括 `direction`、`keyLen` 和 `mode`；`msgLen` 保持为测试用例级字段，因为同组测试可以有不同消息长度。
 
+SM2 的 `operation` 支持 `verify`、`encrypt` 和 `decrypt`。随机加密测试输入测试专用公私钥、`msg` 与 `msgLen`，响应返回 `ct` 和 `testPassed`。由于 SM2 加密每次使用新的随机临时数，响应复核会解密 `ct` 并比较原文，不比较两次运行的密文字节。
+
+运行性能测试并生成结构化 JSON 与 Markdown 报告：
+
+```powershell
+python benchmark.py --backend both --iterations 10 --warmup 2
+python benchmark.py --backend gmssl --quick
+```
+
+默认测试 16、1024、65536 字节消息，覆盖 SM3、HMAC-SM3、SM4-CTR，以及 32 字节消息的 SM2 加密和解密。报告写入 `results/benchmark.json` 与 `reports/benchmark.md`；不支持的后端操作记录为 `skipped`，不会被包装成测量结果。详细说明见 [性能测试实验](docs/performance-testing.md)。
+
 批量处理全部 ACVP 风格请求：
 
 ```powershell
@@ -424,12 +437,12 @@ python runner.py vectors\sm4.json --openssl "C:\path\to\openssl.exe"
 python -m unittest discover -s tests -v
 ```
 
-当前共有 186 项测试：
+当前共有 192 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
 - 24 项 SM2 执行器与编码测试
-- 8 项 SM2 加密、解密、格式转换和私钥编码测试
+- 11 项 SM2 加密、解密、格式转换和私钥编码测试
 - 5 项普通用户 SM2 CLI 测试
 - 7 项普通用户 SM3 CLI 测试
 - 13 项 HMAC-SM3 CLI 测试
@@ -442,15 +455,16 @@ python -m unittest discover -s tests -v
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
 - 5 项批量向量执行与汇总测试
-- 13 项 ACVP 风格请求、响应、Schema、能力约束和标识映射测试
+- 14 项 ACVP 风格请求、响应、Schema、能力约束和标识映射测试
 - 8 项 ACVP 请求批量处理、汇总和响应复核测试
 - 4 项请求 manifest 测试
 - 4 项归档实验报告测试
+- 2 项性能测试工具与报告测试
 
 本次实测结果：
 
 ```text
-Ran 186 tests in ...
+Ran 192 tests in ...
 
 OK
 ```
@@ -458,6 +472,42 @@ OK
 SM3 测试包括标准消息、空消息、长消息、十六进制格式、长度校验、错误摘要和 OpenSSL 缺失处理。
 
 SM4 测试包括 ECB 国标向量加解密、CBC 与 CTR 往返、CTR 非整分组输入、密钥与 IV 校验、错误密文、不支持模式和 OpenSSL 缺失处理。
+
+SM2 测试包括用户 ID 绑定、DER/RAW 签名转换、错误消息/签名/公钥拒绝、随机加密回环、C3 篡改拒绝、三种密文格式转换和 OpenSSL/GmSSL 后端诊断。
+
+## SM2 测试向量
+
+SM2 签名向量位于 `vectors/sm2.json`。测试组声明曲线、用户 ID 和签名格式，测试用例保存消息、公钥、DER 签名及预期结果：
+
+```json
+{
+  "tcId": 1,
+  "operation": "verify",
+  "msg": "6d65737361676520646967657374",
+  "msgLen": 112,
+  "publicKey": "04...",
+  "signature": "3045...",
+  "expected": true
+}
+```
+
+- `msg` 是原始消息字节的十六进制表示，`msgLen` 使用 bit。
+- 公钥必须是 `04 || X || Y` 形式的 65 byte 未压缩点。
+- 签名必须是规范 ASN.1 DER；GmSSL 的 RAW `r || s` 由执行器内部转换。
+- `expected` 表示验签应成功还是失败。
+- 用户 ID 位于测试组中，并参与 `ZA` 和最终签名摘要计算。
+
+当前 6 个用例覆盖有效签名、空消息、修改消息、修改签名、替换公钥和替换用户 ID。
+
+加密与格式向量位于 `vectors/sm2-encryption.json`，支持：
+
+```text
+decrypt          已知密文解密或篡改拒绝
+encryptRoundTrip 随机加密后立即解密并比较原文
+convert          DER、C1C3C2、C1C2C3 格式转换
+```
+
+SM2 加密密文由 `C1`、`C2`、`C3` 构成。同一明文重复加密通常得到不同密文，因此随机加密向量以解密回环判断正确性。C3 不匹配时必须拒绝明文。完整原理、向量来源和格式说明见 [SM2 实验记录](docs/sm2-experiment.md)。
 
 ## SM3 测试向量
 
@@ -537,4 +587,4 @@ SM4 测试用例示例：
 1. 使用 OpenSSL EVP API 编写 C 语言 SM3、SM4 程序。
 2. 让同一批 JSON 向量验证命令行后端和 C 后端。
 3. 研究操作系统密钥库、流式大文件处理和标准化认证加密格式。
-4. 研究可复核的 SM2 随机加密请求表示以及更接近正式算法注册的参数映射。
+4. 研究更接近正式算法注册的 SM2 参数映射和密钥生成请求。

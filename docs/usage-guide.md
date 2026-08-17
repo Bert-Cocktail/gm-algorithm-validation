@@ -69,7 +69,21 @@ SM4 的基本参数为：
 
 当前执行器固定使用 `-nopad`。ECB/CBC 的明文和密文必须是 16 byte 的非空整数倍；CTR 不使用 padding，允许任意非空整字节长度。
 
-### 2.3 SM4-CTR + HMAC-SM3
+### 2.3 SM2
+
+当前支持：
+
+- `sm2p256v1` 曲线上的 SM2 签名验证；
+- 用户 ID、消息、公钥和 DER 签名严格校验；
+- PEM 密钥生成、文件签名与验签；
+- 公钥加密、私钥解密和 C3 完整性验证；
+- DER、C1C3C2、C1C2C3 密文格式转换；
+- OpenSSL/GmSSL 双后端及随机加密回环；
+- ACVP 风格 `verify`、`encrypt`、`decrypt` 请求。
+
+SM2 是非对称算法。签名使用私钥、验签使用公钥；加密使用接收者公钥、解密使用接收者私钥。它适合身份认证和短消息/密钥材料，不适合直接加密大文件。
+
+### 2.4 SM4-CTR + HMAC-SM3
 
 当前组合实验支持：
 
@@ -83,7 +97,7 @@ SM4 的基本参数为：
 
 该接口是学习实验格式，不是经过标准化或安全审计的生产文件格式。
 
-### 2.4 统一运行入口
+### 2.5 统一运行入口
 
 `runner.py` 会读取 JSON 根对象中的 `algorithm` 字段：
 
@@ -110,6 +124,7 @@ gm-algorithm-validation/
 ├── README.md
 ├── gmcrypto.py                # 普通用户命令行工具
 ├── runner.py                  # SM3 实现和统一入口
+├── benchmark.py               # OpenSSL/GmSSL 性能测试与报告
 ├── hmac_sm3_runner.py         # HMAC-SM3 实现与向量校验
 ├── authenticated_sm4.py       # 认证 SM4 格式与编码规则
 ├── authenticated_sm4_runner.py # 认证 SM4 向量执行器
@@ -134,17 +149,22 @@ gm-algorithm-validation/
 │   ├── test_cross_validation.py # OpenSSL/GmSSL 交叉验证
 │   ├── test_runner_backends.py # runner 后端选择测试
 │   ├── test_sm4.py            # SM4 单元与集成测试
+│   ├── test_sm2.py            # SM2 签名、编码和后端测试
+│   ├── test_sm2_encryption.py # SM2 加解密与格式测试
+│   ├── test_benchmark.py      # 性能工具与报告测试
 │   ├── test_gmcrypto.py        # 普通用户 SM3/HMAC-SM3 测试
 │   └── test_runner_dispatch.py # 统一入口分派测试
 ├── examples/
 │   └── message.txt            # SM3 文件摘要实验输入
 ├── docs/
 │   ├── usage-guide.md         # 本说明书
+│   ├── sm2-experiment.md      # SM2 签名与加密实验记录
 │   ├── sm3-experiment.md      # SM3 实验记录
 │   ├── hmac-sm3-experiment.md # HMAC-SM3 实验记录
 │   ├── authenticated-sm4-experiment.md # 认证 SM4 阶段记录
 │   ├── cross-validation.md    # 独立交叉验证记录
-│   └── sm4-experiment.md      # SM4 实验记录
+│   ├── sm4-experiment.md      # SM4 实验记录
+│   └── performance-testing.md # 性能测试说明
 └── results/                   # 预留的结果输出目录
 ```
 
@@ -182,6 +202,15 @@ openssl list -digest-algorithms | Select-String SM3
 openssl list -cipher-algorithms | Select-String SM4
 ```
 
+检查 SM2 曲线与公钥算法：
+
+```powershell
+openssl ecparam -list_curves | Select-String SM2
+openssl list -public-key-algorithms | Select-String SM2
+```
+
+列出算法只能作为初步检查。继续使用一把测试密钥实际执行签名、验签、加密和解密，才能确认当前 OpenSSL 构建完整支持所需 SM2 命令。
+
 当前执行器要求 OpenSSL 至少提供：
 
 ```text
@@ -190,6 +219,8 @@ SM4-ECB
 SM4-CBC
 SM4-CTR
 ```
+
+运行 SM2 的 `openssl` 或 `cross` 后端时，还要求 OpenSSL 能解析 `sm2p256v1` 密钥，并支持 SM2 签名及公钥加解密。只使用 `--backend gmssl` 时不需要 OpenSSL。
 
 ## 5. 基本使用方法
 
@@ -368,7 +399,7 @@ python acvp_adapter.py --all --request-dir acvp\requests --response-dir results\
 python acvp_adapter.py --capabilities
 ```
 
-请求会同时经过 JSON Schema、现有算法参数校验和能力范围校验。SM2 支持确定性的签名验证和私钥解密请求；随机加密暂不进入可复核响应协议。当前执行 `AFT`；`MCT`、`LDT` 仅识别但尚未实现。能力中的 `identifierMapping.acvpAlgorithm` 当前为 `null`，表示项目没有断言正式 NIST ACVP 注册标识。
+请求会同时经过 JSON Schema、现有算法参数校验和能力范围校验。SM2 支持签名验证、随机加密和私钥解密；随机响应通过私钥回解进行语义复核，不要求重新生成相同密文。当前执行 `AFT`；`MCT`、`LDT` 仅识别但尚未实现。能力中的 `identifierMapping.acvpAlgorithm` 当前为 `null`，表示项目没有断言正式 NIST ACVP 注册标识。
 
 生成清单、复核响应并生成报告：
 
@@ -552,7 +583,82 @@ CTR 可以处理非 16 byte 整数倍的数据。以下用例的明文和密文�
 
 当前 28 个 SM4 用例包括 2 个 ECB 国标单分组向量、2 个 ECB 两分组推导向量、4 个原有 CBC 实验向量、4 个 ECB/CBC 三分组向量、2 个 CTR 20 byte 向量，以及 CTR 的 1、15、16、17、31、32、33 byte 加解密边界向量。实验向量由 OpenSSL 1.1.1i 生成，并已使用 Python gmssl 3.2.2 交叉验证；它们不作为官方标准向量。
 
-## 8. 指定 OpenSSL 路径
+## 8. 运行 SM2 验证
+
+SM2 签名向量：
+
+```powershell
+python runner.py vectors\sm2.json --backend gmssl
+python runner.py vectors\sm2.json --backend cross --openssl "C:\path\to\openssl.exe"
+```
+
+签名组主要字段：
+
+```json
+{
+  "curve": "sm2p256v1",
+  "userId": "31323334353637383132333435363738",
+  "signatureFormat": "der",
+  "tests": [
+    {
+      "tcId": 1,
+      "operation": "verify",
+      "msg": "6d65737361676520646967657374",
+      "msgLen": 112,
+      "publicKey": "04...",
+      "signature": "3045...",
+      "expected": true
+    }
+  ]
+}
+```
+
+公钥必须是 65 byte 未压缩点 `04 || X || Y`，消息长度以 bit 表示，签名使用规范 DER。用户 ID 参与 `ZA` 计算，签名和验签必须一致。
+
+SM2 加密、解密与格式向量：
+
+```powershell
+python runner.py vectors\sm2-encryption.json --backend gmssl
+python runner.py vectors\sm2-encryption.json --backend cross --openssl "C:\path\to\openssl.exe"
+```
+
+该文件支持三种操作：
+
+| 操作 | 输入 | 判定方式 |
+|---|---|---|
+| `decrypt` | 私钥、密文、格式 | 比较恢复明文或确认拒绝 |
+| `encryptRoundTrip` | 公私钥、消息 | 随机加密后回解比较原文 |
+| `convert` | 密文、源格式、目标格式 | 比较转换后的编码 |
+
+密文格式：
+
+- `der`：ASN.1 `SEQUENCE(x, y, C3, C2)`；
+- `c1c3c2`：`04 || X || Y || C3 || C2`；
+- `c1c2c3`：`04 || X || Y || C2 || C3`。
+
+本地 ACVP 风格随机加密请求：
+
+```powershell
+python acvp_adapter.py acvp\requests\sm2-request.json `
+  --output results\sm2-response.json `
+  --backend gmssl
+```
+
+`operation: encrypt` 返回随机 `ct` 和 `testPassed`。测试请求携带公开测试专用私钥只为回环复核，实际加密方通常只持有接收者公钥。
+
+普通用户完整流程：
+
+```powershell
+python gmcrypto.py sm2-keygen --private-key sm2-private.pem --public-key sm2-public.pem --openssl "C:\path\to\openssl.exe"
+python gmcrypto.py sm2-sign --private-key sm2-private.pem --input examples\message.txt --signature message.sig --openssl "C:\path\to\openssl.exe"
+python gmcrypto.py sm2-verify --public-key sm2-public.pem --input examples\message.txt --signature message.sig --openssl "C:\path\to\openssl.exe"
+python gmcrypto.py sm2-encrypt --public-key sm2-public.pem --input examples\message.txt --output message.sm2 --format c1c3c2 --openssl "C:\path\to\openssl.exe"
+python gmcrypto.py sm2-decrypt --private-key sm2-private.pem --input message.sm2 --output recovered.txt --format c1c3c2 --openssl "C:\path\to\openssl.exe"
+```
+
+同一明文重复加密得到不同密文是正常现象。解密会验证 C3，失败时不写出明文。
+
+## 9. 指定 OpenSSL 路径
 
 默认情况下，程序从系统 `PATH` 查找 `openssl`。
 
@@ -567,9 +673,9 @@ python runner.py vectors\sm4.json --openssl "C:\完整路径\openssl.exe"
 
 程序不会自动安装 OpenSSL。
 
-## 9. 程序输出和退出码
+## 10. 程序输出和退出码
 
-### 9.1 结构化结果 JSON
+### 10.1 结构化结果 JSON
 
 成功报告示例：
 
@@ -596,7 +702,7 @@ python runner.py vectors\sm4.json --openssl "C:\完整路径\openssl.exe"
 
 `status` 为 `passed`、`failed` 或 `error`。普通测试不一致时，每项结果保留 expected/actual；SM4 额外记录 `mode` 和 `direction`；认证组合分别记录密文、tag 和恢复明文。输入无效时 `summary` 为 `null`，并增加 `error.type` 与 `error.message`。交叉后端不一致使用 `error.type: "backend_mismatches"`，`count` 给出总数，`mismatches` 数组逐项记录 `tcId`、`operation`、`openssl`、`gmssl`；SM4 同时记录模式和方向。执行器收集当前文件全部不一致，认证组合则因步骤依赖而对每个 `tcId` 最多记录第一项。
 
-### 9.2 全部通过
+### 10.2 全部通过
 
 ```text
 [PASS] tcId=1
@@ -610,7 +716,7 @@ Total: N, Passed: N, Failed: 0
 0
 ```
 
-### 9.3 计算结果不一致
+### 10.3 计算结果不一致
 
 ```text
 [FAIL] tcId=1
@@ -624,7 +730,7 @@ Total: N, Passed: N, Failed: 0
 1
 ```
 
-### 9.4 输入或环境错误
+### 10.4 输入或环境错误
 
 例如算法名称错误、JSON 损坏、密钥长度错误或找不到 OpenSSL：
 
@@ -644,7 +750,7 @@ Error: ...
 $LASTEXITCODE
 ```
 
-## 10. 运行测试
+## 11. 运行测试
 
 运行全部测试：
 
@@ -652,12 +758,12 @@ $LASTEXITCODE
 python -m unittest discover -s tests -v
 ```
 
-当前共有 186 项测试：
+当前共有 192 项测试：
 
 - 9 项 SM3 测试
 - 19 项 SM4 测试
 - 24 项 SM2 执行器与编码测试
-- 8 项 SM2 加密、解密、格式转换和私钥编码测试
+- 11 项 SM2 加密、解密、格式转换和私钥编码测试
 - 5 项普通用户 SM2 CLI 测试
 - 7 项 `gmcrypto.py` 普通用户 SM3 CLI 测试
 - 13 项 HMAC-SM3 CLI 测试
@@ -670,15 +776,16 @@ python -m unittest discover -s tests -v
 - 5 项 runner 后端选择测试
 - 6 项结构化结果文件测试
 - 5 项批量向量执行与汇总测试
-- 13 项 ACVP 风格请求、响应、Schema、能力约束和标识映射测试
+- 14 项 ACVP 风格请求、响应、Schema、能力约束和标识映射测试
 - 8 项 ACVP 请求批量处理、汇总和响应复核测试
 - 4 项请求 manifest 测试
 - 4 项归档实验报告测试
+- 2 项性能测试工具与报告测试
 
 当前预期结果：
 
 ```text
-Ran 186 tests in ...
+Ran 192 tests in ...
 
 OK
 ```
@@ -701,9 +808,9 @@ python -m unittest tests.test_sm4 -v
 python -m unittest tests.test_runner_dispatch -v
 ```
 
-## 11. 主要代码说明
+## 12. 主要代码说明
 
-### 11.1 `runner.py`
+### 12.1 `runner.py`
 
 主要职责：
 
@@ -730,7 +837,7 @@ python -m unittest tests.test_runner_dispatch -v
 | `_build_batch_summary()` | 汇总逐文件状态、退出码和测试数量 |
 | `main()` | 统一程序入口和错误处理 |
 
-### 11.2 `gmcrypto.py`
+### 12.2 `gmcrypto.py`
 
 主要职责：
 
@@ -765,7 +872,16 @@ python -m unittest tests.test_runner_dispatch -v
 | `write_atomic()` | 使用同目录临时文件写入并提供覆盖保护 |
 | `main()` | 普通用户命令入口和错误处理 |
 
-### 11.3 `sm4_runner.py`
+### 12.3 SM2 模块
+
+| 模块 | 主要职责 |
+|---|---|
+| `sm2_runner.py` | 签名向量校验、DER/RAW 转换、ZA 与验签后端 |
+| `sm2_cipher.py` | 密钥编码、加解密、C3 检查、密文解析与转换 |
+| `sm2_encryption_runner.py` | 解密、随机回环和格式向量执行 |
+| `acvp_adapter.py` | SM2 `verify/encrypt/decrypt` 请求与随机响应复核 |
+
+### 12.4 `sm4_runner.py`
 
 主要职责：
 
@@ -785,9 +901,9 @@ python -m unittest tests.test_runner_dispatch -v
 | `run_tests()` | 执行 SM4 测试并汇总结果 |
 | `main()` | 独立兼容入口 |
 
-## 12. 如何添加测试向量
+## 13. 如何添加测试向量
 
-### 12.1 添加 SM3 向量
+### 13.1 添加 SM3 向量
 
 1. 在 `vectors/sm3.json` 的 `tests` 数组中增加对象。
 2. 使用尚未重复的 `tcId`。
@@ -796,7 +912,7 @@ python -m unittest tests.test_runner_dispatch -v
 5. 从正式标准或独立可信实现取得 `md`。
 6. 运行统一入口和全部单元测试。
 
-### 12.2 添加 SM4 向量
+### 13.2 添加 SM4 向量
 
 1. 选择 `ECB`、`CBC` 或 `CTR` 测试组。
 2. 选择 `encrypt` 或 `decrypt` 方向。
@@ -814,9 +930,18 @@ python -m json.tool vectors\sm3.json
 python -m json.tool vectors\sm4.json
 ```
 
-## 13. 常见错误
+### 13.3 添加 SM2 向量
 
-### 13.1 找不到 OpenSSL
+1. 签名用例加入 `vectors/sm2.json`，明确 `userId`、消息 bit 长度、公钥、DER 签名和预期布尔值。
+2. 解密、随机回环或格式用例加入 `vectors/sm2-encryption.json`。
+3. 公钥必须是未压缩曲线点，私钥必须是 32 byte 且位于合法范围。
+4. 区分正式来源、公开附录、本地回归和负向篡改向量，不把本地生成数据标为认证向量。
+5. 随机加密不保存固定预期密文，应通过解密回环验证。
+6. 运行两个 SM2 向量文件、专项单元测试和完整测试。
+
+## 14. 常见错误
+
+### 14.1 找不到 OpenSSL
 
 ```text
 Error: OpenSSL was not found
@@ -830,7 +955,7 @@ Get-Command openssl
 
 或使用 `--openssl` 指定完整路径。
 
-### 13.2 SM4 密钥长度错误
+### 14.2 SM4 密钥长度错误
 
 SM4 密钥必须是：
 
@@ -838,11 +963,11 @@ SM4 密钥必须是：
 16 byte = 32 个十六进制字符
 ```
 
-### 13.3 CBC/CTR 缺少 IV
+### 14.3 CBC/CTR 缺少 IV
 
 CBC 和 CTR 测试必须提供 16 byte 的 `iv`。ECB 不使用 IV，也不应出现 `iv` 字段。
 
-### 13.4 明文不是整分组
+### 14.4 明文不是整分组
 
 当前关闭 padding。ECB/CBC 明文和密文必须是：
 
@@ -852,7 +977,7 @@ CBC 和 CTR 测试必须提供 16 byte 的 `iv`。ECB 不使用 IV，也不应�
 
 CTR 不需要 padding，可以处理任意非空整字节长度，例如 1、15、20 byte。
 
-### 13.5 文本与十六进制混淆
+### 14.5 文本与十六进制混淆
 
 字符串：
 
@@ -868,7 +993,16 @@ abc
 
 把文本字符 `616263` 直接作为消息，与把十六进制解码为字节 `abc` 不同。
 
-## 14. 安全限制
+### 14.6 SM2 常见错误
+
+- `invalid digest type` 或 `operation not supported`：当前 OpenSSL 构建缺少对应 SM2 命令能力，指定支持 SM2 的 OpenSSL 3。
+- 验签总是失败：检查消息原始字节、用户 ID、公钥和 DER 签名是否与签名时一致。
+- 每次密文不同：这是随机 SM2 加密的正常行为，应解密比较原文。
+- `integrity check failed`：C3 不匹配，密文可能损坏、格式顺序错误或密钥不对应。
+- `C1 is not a point`：C1 坐标无效、缺少 `04` 前缀或选错密文格式。
+- 解密文件没有生成：程序在完整性或输入检查失败时不会写出明文。
+
+## 15. 安全限制
 
 - SM3 是摘要算法，不能加密或恢复原文。
 - 普通 SM3 摘要不能证明发送者身份；消息认证可研究 HMAC-SM3。
@@ -886,7 +1020,7 @@ abc
 - 认证加密输入文件和 JSON 包上限为 64 MiB，当前会完整读入内存。
 - 认证 JSON 格式未经标准化、安全审计或生产互操作验证。
 
-## 15. 推荐日常流程
+## 16. 推荐日常流程
 
 每次修改后依次运行：
 
@@ -896,6 +1030,8 @@ python runner.py vectors\hmac-sm3.json
 python runner.py vectors\sm4-ctr-hmac-sm3.json
 python runner.py vectors\sm4.json
 python runner.py vectors\sm2.json --backend cross --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+python runner.py vectors\sm2-encryption.json --backend cross --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
+python acvp_adapter.py acvp\requests\sm2-request.json --output results\sm2-response.json --backend cross --openssl "C:\Program Files\Git\usr\bin\openssl.exe"
 python runner.py --all --backend cross --result-dir results
 python -m unittest discover -s tests -v
 git diff --check
@@ -910,7 +1046,7 @@ git diff --cached --stat
 git commit -m "描述本次修改"
 ```
 
-## 16. 后续扩展方向
+## 17. 后续扩展方向
 
 尚未实现但可以继续开展：
 
@@ -920,5 +1056,5 @@ git commit -m "描述本次修改"
 4. 若获得明确覆盖 SM3/SM4 的权威规范，实现对应 MCT、LDT 规则及正式参数集映射。
 5. 为 HMAC-SM3 增加独立正式标准向量。
 6. 研究流式大文件处理、操作系统密钥库和标准化认证加密容器。
-7. 为 SM2 增加可复核的随机加密请求表示、更多与现行 `sm2p256v1` 完全匹配的公开标准向量。
+7. 为 SM2 增加密钥生成请求、更多与现行 `sm2p256v1` 完全匹配的公开标准向量和密钥交换实验。
 8. 在具备授权和合规条件后，另行研究 ACVTS 注册、会话和传输流程。

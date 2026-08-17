@@ -81,7 +81,7 @@ results/
 全仓库测试结果：
 
 ```text
-Ran 186 tests in ...
+Ran 192 tests in ...
 
 OK
 ```

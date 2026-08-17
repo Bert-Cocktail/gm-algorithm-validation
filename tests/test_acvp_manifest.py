@@ -30,7 +30,7 @@ class TestAcvpManifest(unittest.TestCase):
             manifest = json.loads(output.read_text(encoding="utf-8"))
 
         self.assertEqual(exit_code, acvp_adapter.EXIT_SUCCESS)
-        self.assertEqual(manifest["summary"], {"files": 4, "tests": 9})
+        self.assertEqual(manifest["summary"], {"files": 4, "tests": 10})
         self.assertEqual(
             [item["file"] for item in manifest["files"]],
             [

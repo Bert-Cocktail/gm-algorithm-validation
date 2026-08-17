@@ -9,8 +9,24 @@
       {
         "tgId": 1,
         "tests": [
-          {"tcId": 1, "testPassed": true},
-          {"tcId": 2, "testPassed": false}
+          {
+            "tcId": 1,
+            "testPassed": true
+          },
+          {
+            "tcId": 2,
+            "testPassed": false
+          }
+        ]
+      },
+      {
+        "tgId": 3,
+        "tests": [
+          {
+            "tcId": 5,
+            "testPassed": true,
+            "ct": "044499022149f322e2849266d6053e58557cbb2c9396c5b04c743bd24c2bc2fa1ba016a68c72748ee5a88744e20c37b34d3615e250e8fd7d1a56729e7ed3301779728eb875a6c1354860ef9ea820a4b5289e80ccb6326fbd3c18e6f12e4cbe21808dd8b715d7c06c45a31a22e4e74749ddc4ca8c1752"
+          }
         ]
       },
       {
@@ -21,7 +37,10 @@
             "testPassed": true,
             "pt": "656e6372797074696f6e207374616e64617264"
           },
-          {"tcId": 4, "testPassed": false}
+          {
+            "tcId": 4,
+            "testPassed": false
+          }
         ]
       }
     ]

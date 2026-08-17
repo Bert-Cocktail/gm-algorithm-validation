@@ -50,7 +50,7 @@
     "sm2Group": {
       "allOf": [
         {"$ref": "#/$defs/resultGroup"},
-        {"properties": {"tests": {"items": {"type": "object", "properties": {"tcId": {"type": "integer"}, "testPassed": {"type": "boolean"}, "pt": {"type": "string", "pattern": "^(?:[0-9a-f]{2})+$"}}, "required": ["tcId", "testPassed"], "additionalProperties": false}}}}
+        {"properties": {"tests": {"items": {"type": "object", "properties": {"tcId": {"type": "integer"}, "testPassed": {"type": "boolean"}, "pt": {"type": "string", "pattern": "^(?:[0-9a-f]{2})+$"}, "ct": {"type": "string", "pattern": "^(?:[0-9a-f]{2})+$"}}, "required": ["tcId", "testPassed"], "additionalProperties": false}}}}
       ]
     },
     "macGroup": {
